@@ -1,0 +1,6 @@
+{
+  "name": "GoalPulse Live Match & Tournament Manager",
+  "description": "Live football match tracking with goals, assists, fouls, yellow/red cards, score rollback, team budgets, player market values, standings table, top scorers leaderboard, and admin/public control modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,764 @@
+import React, { useState } from 'react';
+import { TournamentInfo, NoticeItem } from '../types';
+import { 
+  Trophy, 
+  Share2, 
+  MapPin, 
+  Phone, 
+  Calendar, 
+  Shield, 
+  Bell, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  ExternalLink, 
+  Image as ImageIcon, 
+  Award, 
+  BookOpen, 
+  Info,
+  CheckCircle2
+} from 'lucide-react';
+import { ImageUploadBox } from './ImageUploadBox';
+
+interface TournamentInfoViewProps {
+  info: TournamentInfo;
+  isAdmin: boolean;
+  onUpdateInfo: (updatedInfo: TournamentInfo) => void;
+}
+
+export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
+  info,
+  isAdmin,
+  onUpdateInfo
+}) => {
+  // Modal states
+  const [showEditInfoModal, setShowEditInfoModal] = useState(false);
+  const [showAddNoticeModal, setShowAddNoticeModal] = useState(false);
+  const [showAddPhotoModal, setShowAddPhotoModal] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+
+  // Edit Info Form State
+  const [name, setName] = useState(info.name);
+  const [tagline, setTagline] = useState(info.tagline);
+  const [bannerPhotoUrl, setBannerPhotoUrl] = useState(info.bannerPhotoUrl);
+  const [facebookPageUrl, setFacebookPageUrl] = useState(info.facebookPageUrl);
+  const [facebookGroupName, setFacebookGroupName] = useState(info.facebookGroupName || '');
+  const [venueName, setVenueName] = useState(info.venueName);
+  const [venueLocation, setVenueLocation] = useState(info.venueLocation);
+  const [contactNumber, setContactNumber] = useState(info.contactNumber);
+  const [organizerName, setOrganizerName] = useState(info.organizerName);
+  const [startDate, setStartDate] = useState(info.startDate);
+  const [endDate, setEndDate] = useState(info.endDate);
+  const [prizeMoney, setPrizeMoney] = useState(info.prizeMoney);
+  const [rulesSummary, setRulesSummary] = useState(info.rulesSummary);
+
+  // New Notice Form State
+  const [noticeTitle, setNoticeTitle] = useState('');
+  const [noticeContent, setNoticeContent] = useState('');
+  const [noticeIsImportant, setNoticeIsImportant] = useState(false);
+
+  // New Gallery Photo Form State
+  const [newGalleryPhoto, setNewGalleryPhoto] = useState('');
+
+  const handleOpenEditInfo = () => {
+    setName(info.name);
+    setTagline(info.tagline);
+    setBannerPhotoUrl(info.bannerPhotoUrl);
+    setFacebookPageUrl(info.facebookPageUrl);
+    setFacebookGroupName(info.facebookGroupName || '');
+    setVenueName(info.venueName);
+    setVenueLocation(info.venueLocation);
+    setContactNumber(info.contactNumber);
+    setOrganizerName(info.organizerName);
+    setStartDate(info.startDate);
+    setEndDate(info.endDate);
+    setPrizeMoney(info.prizeMoney);
+    setRulesSummary(info.rulesSummary);
+    setShowEditInfoModal(true);
+  };
+
+  const handleSaveInfoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onUpdateInfo({
+      ...info,
+      name,
+      tagline,
+      bannerPhotoUrl,
+      facebookPageUrl,
+      facebookGroupName,
+      venueName,
+      venueLocation,
+      contactNumber,
+      organizerName,
+      startDate,
+      endDate,
+      prizeMoney,
+      rulesSummary
+    });
+    setShowEditInfoModal(false);
+  };
+
+  const handleAddNoticeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noticeTitle.trim()) return;
+
+    const newNotice: NoticeItem = {
+      id: `notice-${Date.now()}`,
+      title: noticeTitle,
+      content: noticeContent,
+      date: new Date().toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }),
+      isImportant: noticeIsImportant,
+      author: info.organizerName || 'টুর্নামেন্ট কমিটি'
+    };
+
+    onUpdateInfo({
+      ...info,
+      notices: [newNotice, ...info.notices]
+    });
+
+    setNoticeTitle('');
+    setNoticeContent('');
+    setNoticeIsImportant(false);
+    setShowAddNoticeModal(false);
+  };
+
+  const handleDeleteNotice = (noticeId: string) => {
+    if (confirm('আপনি কি এই নোটিশটি মুছে ফেলতে চান?')) {
+      onUpdateInfo({
+        ...info,
+        notices: info.notices.filter(n => n.id !== noticeId)
+      });
+    }
+  };
+
+  const handleAddPhotoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGalleryPhoto) return;
+
+    onUpdateInfo({
+      ...info,
+      galleryPhotos: [newGalleryPhoto, ...(info.galleryPhotos || [])]
+    });
+
+    setNewGalleryPhoto('');
+    setShowAddPhotoModal(false);
+  };
+
+  const handleDeletePhoto = (photoUrl: string) => {
+    if (confirm('এই ছবিটি গ্যালারি থেকে মুছে ফেলতে চান?')) {
+      onUpdateInfo({
+        ...info,
+        galleryPhotos: (info.galleryPhotos || []).filter(p => p !== photoUrl)
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-16">
+      {/* 1. HERO BANNER & TOURNAMENT TITLE CARD */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border border-slate-800 shadow-2xl">
+        {info.bannerPhotoUrl ? (
+          <div className="h-52 sm:h-72 w-full relative">
+            <img 
+              src={info.bannerPhotoUrl} 
+              alt={info.name} 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent" />
+          </div>
+        ) : (
+          <div className="h-32 sm:h-44 w-full bg-gradient-to-r from-emerald-950/60 via-slate-900 to-indigo-950/60 relative flex items-center justify-center">
+            <div className="text-center">
+              <span className="text-4xl sm:text-6xl opacity-30">⚽🏆</span>
+            </div>
+          </div>
+        )}
+
+        <div className="p-6 sm:p-8 -mt-12 sm:-mt-16 relative z-10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-2 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-inner">
+                <Trophy className="w-3.5 h-3.5" />
+                <span>অফিসিয়াল টুর্নামেন্ট ইনফরমেশন সেন্টার</span>
+              </div>
+              <h1 className="text-2xl sm:text-4xl font-black text-white font-display tracking-tight">
+                {info.name}
+              </h1>
+              <p className="text-sm sm:text-base text-slate-300 font-medium">
+                {info.tagline}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2 text-xs text-slate-400">
+                <span className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+                  {info.venueName}, {info.venueLocation}
+                </span>
+                <span className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/80">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                  {info.startDate} - {info.endDate}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
+              {info.facebookPageUrl && (
+                <a
+                  href={info.facebookPageUrl.startsWith('http') ? info.facebookPageUrl : `https://${info.facebookPageUrl}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs shadow-lg shadow-blue-950 transition-all cursor-pointer"
+                >
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  <span>ফেসবুক পেজ ফলো করুন</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                </a>
+              )}
+
+              {isAdmin && (
+                <button
+                  onClick={handleOpenEditInfo}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold text-xs border border-slate-700 shadow-md transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>তথ্য ও ছবি এডিট করুন</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. FACEBOOK PAGE & SOCIAL INTEGRATION CARD 🌐 */}
+      <div className="bg-gradient-to-r from-blue-950/30 via-slate-900 to-indigo-950/30 rounded-3xl border border-blue-900/40 p-6 sm:p-8 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-[#1877F2] text-white flex items-center justify-center shadow-xl shadow-blue-950 flex-shrink-0">
+            <svg className="w-8 h-8 fill-current" viewBox="0 0 24 24">
+              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-black text-white font-display flex items-center gap-2">
+              <span>অফিসিয়াল ফেসবুক পেজ ও কমিউনিটি</span>
+            </h3>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl">
+              টুর্নামেন্টের সরাসরি লাইভ ভিডিও সম্প্রচার, ম্যাচ ফটোশুট, ম্যান অব দ্য ম্যাচ ইন্টারভিউ ও আকর্ষণীয় আপডেট পেতে আমাদের ফেসবুক পেজের সাথে যুক্ত থাকুন।
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          {info.facebookPageUrl ? (
+            <a
+              href={info.facebookPageUrl.startsWith('http') ? info.facebookPageUrl : `https://${info.facebookPageUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full md:w-auto text-center px-6 py-3 rounded-2xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-extrabold text-sm shadow-xl shadow-blue-950 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <span>Visit Official Facebook Page</span>
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          ) : (
+            <button
+              onClick={handleOpenEditInfo}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700"
+            >
+              ➕ ফেসবুক পেজ লিঙ্ক যুক্ত করুন
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 3. GRID: PRIZE MONEY & RULES + NOTICE BOARD */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Cols: NOTICE BOARD 📢 */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                <Bell className="w-4 h-4" />
+              </div>
+              <h2 className="text-lg font-black text-white font-display">
+                টুর্নামেন্ট নোটিশ বোর্ড (Notice Board)
+              </h2>
+            </div>
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowAddNoticeModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 transition-all cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>নতুন নোটিশ দিন</span>
+              </button>
+            )}
+          </div>
+
+          {info.notices && info.notices.length > 0 ? (
+            <div className="space-y-3">
+              {info.notices.map((notice) => (
+                <div
+                  key={notice.id}
+                  className={`rounded-2xl border p-5 transition-all ${
+                    notice.isImportant
+                      ? 'bg-gradient-to-r from-amber-950/30 via-slate-900 to-slate-900 border-amber-500/40 shadow-lg'
+                      : 'bg-slate-900/80 border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {notice.isImportant && (
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
+                            🚨 জরুরী ঘোষণা
+                          </span>
+                        )}
+                        <h3 className="text-sm font-bold text-white font-display">
+                          {notice.title}
+                        </h3>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                        {notice.content}
+                      </p>
+                      <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-2 border-t border-slate-800/80">
+                        <span>📅 {notice.date}</span>
+                        <span>•</span>
+                        <span>✍️ {notice.author || 'টুর্নামেন্ট কমিটি'}</span>
+                      </div>
+                    </div>
+
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDeleteNotice(notice.id)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors cursor-pointer"
+                        title="নোটিশ মুছুন"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs">
+              এখনো কোনো নোটিশ প্রকাশ করা হয়নি।
+            </div>
+          )}
+        </div>
+
+        {/* Right 1 Col: PRIZE MONEY & KEY DETAILS 🏆 */}
+        <div className="space-y-6">
+          {/* Prize Money Card */}
+          <div className="bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/30 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/40">
+                <Trophy className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white font-display">
+                  পুরস্কার ও প্রাইজমানি (Prizes)
+                </h3>
+                <span className="text-xs text-amber-400/90 font-medium">আকর্ষণীয় ট্রফি ও সম্মাননা</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-950/80 border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed whitespace-pre-line font-medium">
+              {info.prizeMoney || 'চ্যাম্পিয়ন ট্রফি, মেডেল ও প্রাইজমানি'}
+            </div>
+          </div>
+
+          {/* Organizer & Helpline Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/40">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-white font-display">
+                  আয়োজক ও যোগাযোগ
+                </h3>
+                <span className="text-xs text-slate-400 font-medium">Organizing Committee</span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">কমিটি:</span>
+                <strong className="text-white">{info.organizerName}</strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-slate-400">হেল্পলাইন:</span>
+                <strong className="text-emerald-400 font-mono">{info.contactNumber}</strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-slate-400">ভেন্যু:</span>
+                <strong className="text-slate-200">{info.venueName}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Tournament Rules Card */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-3">
+            <div className="flex items-center gap-2.5">
+              <BookOpen className="w-4 h-4 text-emerald-400" />
+              <h3 className="text-sm font-extrabold text-white font-display">
+                টুর্নামেন্ট নিয়মাবলী (Rules)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 font-mono">
+              {info.rulesSummary || 'সকল আন্তর্জাতিক ও স্থানীয় ফুটবল রুলস কার্যকর থাকবে।'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. PHOTO GALLERY SECTION 📸 */}
+      <div className="space-y-4 pt-4 border-t border-slate-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/30 flex items-center justify-center">
+              <ImageIcon className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-white font-display">
+                টুর্নামেন্ট ছবির গ্যালারি (Photo Gallery)
+              </h2>
+              <p className="text-xs text-slate-400">মাঠের উত্তেজনা, ট্রফি ও প্লেয়ারদের বিশেষ মুহূর্তসমূহ</p>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <button
+              onClick={() => setShowAddPhotoModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>ছবি যোগ করুন</span>
+            </button>
+          )}
+        </div>
+
+        {info.galleryPhotos && info.galleryPhotos.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {info.galleryPhotos.map((photo, index) => (
+              <div 
+                key={index}
+                className="group relative aspect-video sm:aspect-square rounded-2xl overflow-hidden bg-slate-900 border border-slate-800 shadow-md cursor-pointer hover:border-emerald-500/50 transition-all"
+                onClick={() => setSelectedPhoto(photo)}
+              >
+                <img 
+                  src={photo} 
+                  alt={`Tournament photo ${index + 1}`} 
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <span className="text-white text-xs font-bold bg-black/60 px-2.5 py-1 rounded-lg">
+                    🔍 বড় করে দেখুন
+                  </span>
+                  {isAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePhoto(photo);
+                      }}
+                      className="p-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-500 transition-colors"
+                      title="মুছুন"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center">
+            <ImageIcon className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
+            <p className="text-xs text-slate-400">এখনো কোনো ছবি যুক্ত করা হয়নি।</p>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAddPhotoModal(true)}
+                className="mt-3 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+              >
+                📷 প্রথম ছবি আপলোড করুন
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL 1: EDIT TOURNAMENT INFO ✏️ */}
+      {showEditInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-black text-white font-display mb-4 flex items-center gap-2">
+              <span>🏆</span>
+              <span>টুর্নামেন্ট তথ্য, ব্যানার ও ফেসবুক পেজ এডিট</span>
+            </h3>
+
+            <form onSubmit={handleSaveInfoSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">টুর্নামেন্টের নাম *</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">ট্যাগলাইন / স্লোগান</label>
+                <input
+                  type="text"
+                  value={tagline}
+                  onChange={(e) => setTagline(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              {/* Tournament Banner Upload */}
+              <div>
+                <ImageUploadBox
+                  label="🖼️ টুর্নামেন্ট ব্যানার / পোস্টার ছবি"
+                  sublabel="ডিভাইস থেকে টুর্নামেন্টের ব্যানার বা কভার ছবি সিলেক্ট করুন"
+                  value={bannerPhotoUrl}
+                  onChange={setBannerPhotoUrl}
+                  aspectRatio="square"
+                  fallbackText="ব্যানার"
+                />
+              </div>
+
+              {/* Facebook Page URL */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">🌐 অফিসিয়াল ফেসবুক পেজ লিঙ্ক (URL)</label>
+                <input
+                  type="url"
+                  placeholder="https://facebook.com/yourpage"
+                  value={facebookPageUrl}
+                  onChange={(e) => setFacebookPageUrl(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">ভেন্যুর নাম</label>
+                  <input
+                    type="text"
+                    value={venueName}
+                    onChange={(e) => setVenueName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">ভেন্যুর ঠিকানা/শহর</label>
+                  <input
+                    type="text"
+                    value={venueLocation}
+                    onChange={(e) => setVenueLocation(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">আয়োজক কমিটি</label>
+                  <input
+                    type="text"
+                    value={organizerName}
+                    onChange={(e) => setOrganizerName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">হেল্পলাইন নম্বর</label>
+                  <input
+                    type="text"
+                    value={contactNumber}
+                    onChange={(e) => setContactNumber(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">পুরস্কার ও প্রাইজমানি বিবরণ</label>
+                <textarea
+                  rows={2}
+                  value={prizeMoney}
+                  onChange={(e) => setPrizeMoney(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">খেলার সংক্ষিপ্ত নিয়মাবলী</label>
+                <textarea
+                  rows={3}
+                  value={rulesSummary}
+                  onChange={(e) => setRulesSummary(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditInfoModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950"
+                >
+                  সংরক্ষণ করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: ADD NEW NOTICE 📢 */}
+      {showAddNoticeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-white font-display mb-4 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-400" />
+              <span>নতুন নোটিশ প্রকাশ করুন</span>
+            </h3>
+
+            <form onSubmit={handleAddNoticeSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">নোটিশের শিরোনাম *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="যেমন: ৩য় রাউন্ডের ম্যাচ সময়সূচি পরিবর্তন"
+                  value={noticeTitle}
+                  onChange={(e) => setNoticeTitle(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">নোটিশের পূর্ণ বিবরণ *</label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="বিস্তারিত তথ্য লিখুন..."
+                  value={noticeContent}
+                  onChange={(e) => setNoticeContent(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-950 border border-slate-800">
+                <input
+                  type="checkbox"
+                  id="importantNotice"
+                  checked={noticeIsImportant}
+                  onChange={(e) => setNoticeIsImportant(e.target.checked)}
+                  className="w-4 h-4 rounded text-rose-500 focus:ring-rose-500"
+                />
+                <label htmlFor="importantNotice" className="text-xs font-bold text-rose-400 cursor-pointer">
+                  🚨 এটি একটি জরুরী (High Priority) ঘোষণা হিসেবে দেখান
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddNoticeModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950"
+                >
+                  নোটিশ প্রকাশ করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: ADD GALLERY PHOTO 📸 */}
+      {showAddPhotoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-lg font-black text-white font-display mb-4 flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-teal-400" />
+              <span>গ্যালারিতে নতুন ছবি আপলোড</span>
+            </h3>
+
+            <form onSubmit={handleAddPhotoSubmit} className="space-y-4">
+              <ImageUploadBox
+                label="ছবি নির্বাচন করুন"
+                sublabel="গ্যালারি বা ক্যামেরা থেকে ম্যাচ/টুর্নামেন্টের ছবি নির্বাচন করুন"
+                value={newGalleryPhoto}
+                onChange={setNewGalleryPhoto}
+                aspectRatio="square"
+                fallbackText="ছবি"
+              />
+
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddPhotoModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newGalleryPhoto}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-950 cursor-pointer"
+                >
+                  গ্যালারিতে যুক্ত করুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* LIGHTBOX FOR FULL IMAGE PREVIEW 🔍 */}
+      {selectedPhoto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn cursor-pointer"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="max-w-4xl max-h-[90vh] p-2 relative" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={selectedPhoto} 
+              alt="Full view" 
+              className="max-h-[85vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain mx-auto"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute top-4 right-4 bg-black/70 hover:bg-black text-white px-3 py-1.5 rounded-full text-xs font-bold border border-white/20"
+            >
+              ✕ বন্ধ করুন
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

@@ -1,0 +1,21 @@
+{
+  "short_name": "GoalPulse",
+  "name": "GoalPulse Live Match & Tournament Manager",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=192&auto=format&fit=crop&q=80",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=512&auto=format&fit=crop&q=80",
+      "type": "image/jpeg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#059669",
+  "display": "standalone",
+  "orientation": "portrait"
+}
