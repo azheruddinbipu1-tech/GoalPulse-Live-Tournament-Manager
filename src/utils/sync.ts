@@ -308,7 +308,7 @@ export function cascadePlayerUpdate(
     ? players.map((p) => (p.id === updatedPlayer.id ? updatedPlayer : p))
     : [...players, updatedPlayer];
 
-  // 2. Cascade player name and team across all match events & POTM awards
+  // 2. Cascade player name across all match events & POTM awards safely
   const updatedMatches = matches.map((match) => {
     let matchChanged = false;
 
@@ -319,7 +319,10 @@ export function cascadePlayerUpdate(
 
       if (event.playerId === updatedPlayer.id) {
         newEvent.playerName = updatedPlayer.name;
-        newEvent.teamId = updatedPlayer.teamId;
+        // If event teamId was empty or player's new team is in this match, keep valid
+        if (!newEvent.teamId) {
+          newEvent.teamId = updatedPlayer.teamId;
+        }
         evChanged = true;
       }
       if (event.assistPlayerId === updatedPlayer.id) {
