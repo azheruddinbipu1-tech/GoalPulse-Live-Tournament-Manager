@@ -4,22 +4,21 @@ import { Team, Player, Match, TournamentInfo } from '../types';
 import { INITIAL_TEAMS, INITIAL_PLAYERS, INITIAL_MATCHES, INITIAL_TOURNAMENT_INFO } from '../sampleData';
 
 // Firestore collection & document identifier
-const TOURNAMENT_COLLECTION = 'tournament_state';
-const TOURNAMENT_DOC_ID = 'main_state';
+export const TOURNAMENT_COLLECTION = 'tournament_state';
+export const TOURNAMENT_DOC_ID = 'main_state';
 
-// Cross-tab broadcast channel for instant multi-tab sync on same device
-const SYNC_CHANNEL_NAME = 'npl_tournament_sync_channel';
+// Cross-tab broadcast channel for instant multi-tab sync on same machine
+const SYNC_CHANNEL_NAME = 'goalpulse_realtime_sync_channel';
 
 export interface SyncPayload {
-  type: 'SYNC_ALL' | 'UPDATE_TEAMS' | 'UPDATE_PLAYERS' | 'UPDATE_MATCHES' | 'UPDATE_INFO' | 'UPDATE_PIN';
+  type: 'SYNC_ALL' | 'PARTIAL_UPDATE';
   teams?: Team[];
   players?: Player[];
   matches?: Match[];
   tournamentInfo?: TournamentInfo;
   adminPin?: string;
-  senderId: string;
-  timestamp: number;
-  version?: number;
+  senderId?: string;
+  timestamp?: number;
 }
 
 // Generate unique sender ID per browser tab session
@@ -34,98 +33,80 @@ try {
   broadcastChannel = null;
 }
 
-// Track current state version locally
-let currentGlobalVersion = 0;
-
-// Debounce timer for Firestore writes to optimize throughput on fast updates
-let syncTimeout: any = null;
-let pendingSyncPayload: Partial<SyncPayload> | null = null;
-
 /**
- * Pushes state updates directly to Firebase Cloud Firestore
+ * Pushes state updates directly to Firebase Cloud Firestore as the Single Source of Truth
  */
-async function pushStateToFirestore(payload: Omit<SyncPayload, 'senderId' | 'timestamp'>) {
+export async function pushStateToFirestore(payload: {
+  teams?: Team[];
+  players?: Player[];
+  matches?: Match[];
+  tournamentInfo?: TournamentInfo;
+  adminPin?: string;
+}): Promise<boolean> {
   try {
     const docRef = doc(db, TOURNAMENT_COLLECTION, TOURNAMENT_DOC_ID);
-    currentGlobalVersion = (currentGlobalVersion || 0) + 1;
 
-    const dataToSave: any = {
-      version: currentGlobalVersion,
+    const dataToSave: Record<string, any> = {
       lastUpdated: Date.now(),
       senderId: TAB_SESSION_ID,
     };
 
-    if (Array.isArray(payload.teams)) dataToSave.teams = payload.teams;
-    if (Array.isArray(payload.players)) dataToSave.players = payload.players;
-    if (Array.isArray(payload.matches)) dataToSave.matches = payload.matches;
-    if (payload.tournamentInfo) dataToSave.tournamentInfo = payload.tournamentInfo;
-    if (payload.adminPin) dataToSave.adminPin = payload.adminPin;
+    if (payload.teams !== undefined) dataToSave.teams = payload.teams;
+    if (payload.players !== undefined) dataToSave.players = payload.players;
+    if (payload.matches !== undefined) dataToSave.matches = payload.matches;
+    if (payload.tournamentInfo !== undefined) dataToSave.tournamentInfo = payload.tournamentInfo;
+    if (payload.adminPin !== undefined) dataToSave.adminPin = payload.adminPin;
 
     await setDoc(docRef, dataToSave, { merge: true });
 
-    // Also notify backup Express server if available in background
-    fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...dataToSave }),
-    }).catch(() => {});
+    // Update local cache
+    try {
+      if (payload.teams !== undefined) localStorage.setItem('gp_teams', JSON.stringify(payload.teams));
+      if (payload.players !== undefined) localStorage.setItem('gp_players', JSON.stringify(payload.players));
+      if (payload.matches !== undefined) localStorage.setItem('gp_matches', JSON.stringify(payload.matches));
+      if (payload.tournamentInfo !== undefined) localStorage.setItem('gp_tournament_info', JSON.stringify(payload.tournamentInfo));
+      if (payload.adminPin !== undefined) localStorage.setItem('gp_admin_pin', payload.adminPin);
+    } catch {}
+
+    return true;
   } catch (err) {
-    console.warn('[FIRESTORE] Cloud Firestore write error:', err);
-    // Offline backup to localStorage is already performed
+    console.error('[FIRESTORE] Cloud Firestore write error:', err);
+    return false;
   }
 }
 
 /**
- * Broadcasts state changes to all other open tabs AND persists to Cloud Firestore in real-time
+ * Unified state broadcast & Firestore persistence function
  */
-export function broadcastStateChange(payload: Omit<SyncPayload, 'senderId' | 'timestamp'>) {
+export function broadcastStateChange(payload: {
+  teams?: Team[];
+  players?: Player[];
+  matches?: Match[];
+  tournamentInfo?: TournamentInfo;
+  adminPin?: string;
+}) {
   const fullPayload: SyncPayload = {
+    type: 'PARTIAL_UPDATE',
     ...payload,
     senderId: TAB_SESSION_ID,
     timestamp: Date.now(),
   };
 
-  // 1. Instant local BroadcastChannel for open tabs on the same machine
+  // 1. Cross-tab channel for instantaneous local reflection
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage(fullPayload);
     } catch (e) {
-      console.warn('BroadcastChannel failed:', e);
+      console.warn('BroadcastChannel postMessage error:', e);
     }
   }
 
-  // 2. Offline local backup storage
-  try {
-    if (payload.teams) localStorage.setItem('gp_teams', JSON.stringify(payload.teams));
-    if (payload.players) localStorage.setItem('gp_players', JSON.stringify(payload.players));
-    if (payload.matches) localStorage.setItem('gp_matches', JSON.stringify(payload.matches));
-    if (payload.tournamentInfo) localStorage.setItem('gp_tournament_info', JSON.stringify(payload.tournamentInfo));
-    if (payload.adminPin) localStorage.setItem('gp_admin_pin', payload.adminPin);
-
-    localStorage.setItem(
-      'gp_sync_ping',
-      JSON.stringify({
-        timestamp: Date.now(),
-        senderId: TAB_SESSION_ID,
-        type: payload.type,
-      })
-    );
-  } catch {}
-
-  // 3. Central Firestore Push (debounced for rapid successive score/event clicks)
-  pendingSyncPayload = { ...pendingSyncPayload, ...payload };
-  if (syncTimeout) clearTimeout(syncTimeout);
-
-  syncTimeout = setTimeout(() => {
-    if (pendingSyncPayload) {
-      pushStateToFirestore(pendingSyncPayload as any);
-      pendingSyncPayload = null;
-    }
-  }, 50);
+  // 2. Direct Cloud Firestore Push (Single Source of Truth)
+  pushStateToFirestore(payload);
 }
 
 /**
- * Fetches the initial state from Cloud Firestore (or initial seeds if first run)
+ * Loads initial state from Cloud Firestore (or seeds it if empty on first startup)
  */
 export async function fetchInitialServerState(): Promise<SyncPayload | null> {
   try {
@@ -134,29 +115,24 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
 
     if (snap.exists()) {
       const data = snap.data();
-      if (data && typeof data.version === 'number') {
-        currentGlobalVersion = data.version;
-      }
       return {
         type: 'SYNC_ALL',
-        teams: Array.isArray(data.teams) && data.teams.length > 0 ? data.teams : INITIAL_TEAMS,
-        players: Array.isArray(data.players) && data.players.length > 0 ? data.players : INITIAL_PLAYERS,
-        matches: Array.isArray(data.matches) && data.matches.length > 0 ? data.matches : INITIAL_MATCHES,
+        teams: Array.isArray(data.teams) ? data.teams : INITIAL_TEAMS,
+        players: Array.isArray(data.players) ? data.players : INITIAL_PLAYERS,
+        matches: Array.isArray(data.matches) ? data.matches : INITIAL_MATCHES,
         tournamentInfo: data.tournamentInfo || INITIAL_TOURNAMENT_INFO,
         adminPin: data.adminPin || '1234',
-        version: data.version || 1,
         senderId: 'firestore-initial',
         timestamp: data.lastUpdated || Date.now(),
       };
     } else {
-      // Initialize Firestore document with the tournament seed data
+      // Initialize Firestore document with initial data once
       const initialPayload = {
         teams: INITIAL_TEAMS,
         players: INITIAL_PLAYERS,
         matches: INITIAL_MATCHES,
         tournamentInfo: INITIAL_TOURNAMENT_INFO,
         adminPin: '1234',
-        version: 1,
         lastUpdated: Date.now(),
         senderId: 'initial_seed',
       };
@@ -169,8 +145,7 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
       };
     }
   } catch (err) {
-    console.warn('[FIRESTORE] Initial fetch warning (using offline cache):', err);
-    // Offline fallback from localStorage
+    console.warn('[FIRESTORE] Initial fetch fallback from offline cache:', err);
     try {
       const teams = localStorage.getItem('gp_teams');
       const players = localStorage.getItem('gp_players');
@@ -188,7 +163,6 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
           adminPin: adminPin || '1234',
           senderId: 'offline-cache',
           timestamp: Date.now(),
-          version: 1,
         };
       }
     } catch {}
@@ -197,107 +171,88 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
 }
 
 /**
- * Subscribes to Real-Time Updates via Firestore `onSnapshot` + Cross-Tab & Offline Broadcast
+ * Subscribes to real-time Cloud Firestore updates via `onSnapshot`
  */
-export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => void) {
+export function subscribeToStateSync(
+  onSyncReceived: (payload: SyncPayload) => void
+): () => void {
   if (typeof window === 'undefined') return () => {};
 
   let unsubscribeFirestore: Unsubscribe | null = null;
   let isSubscribed = true;
 
-  // 📡 1. Real-Time Cloud Firestore `onSnapshot` listener
   try {
     const docRef = doc(db, TOURNAMENT_COLLECTION, TOURNAMENT_DOC_ID);
     unsubscribeFirestore = onSnapshot(
       docRef,
       (snapshot) => {
-        if (!isSubscribed || !snapshot.exists()) return;
-        const data = snapshot.data();
+        if (!isSubscribed) return;
 
-        // Ignore updates originated by our own tab session unless first load
-        if (data.senderId === TAB_SESSION_ID) return;
+        if (snapshot.exists()) {
+          const data = snapshot.data();
 
-        if (typeof data.version === 'number') {
-          if (data.version <= currentGlobalVersion && data.senderId !== 'initial_seed') {
+          // Don't process echo events from our own tab if it is a pending write we just made
+          if (data.senderId === TAB_SESSION_ID && snapshot.metadata.hasPendingWrites) {
             return;
           }
-          currentGlobalVersion = data.version;
+
+          const payload: SyncPayload = {
+            type: 'SYNC_ALL',
+            teams: Array.isArray(data.teams) ? data.teams : undefined,
+            players: Array.isArray(data.players) ? data.players : undefined,
+            matches: Array.isArray(data.matches) ? data.matches : undefined,
+            tournamentInfo: data.tournamentInfo || undefined,
+            adminPin: data.adminPin || undefined,
+            senderId: data.senderId || 'firestore-live',
+            timestamp: data.lastUpdated || Date.now(),
+          };
+
+          // Keep localStorage offline cache updated
+          try {
+            if (Array.isArray(data.teams)) localStorage.setItem('gp_teams', JSON.stringify(data.teams));
+            if (Array.isArray(data.players)) localStorage.setItem('gp_players', JSON.stringify(data.players));
+            if (Array.isArray(data.matches)) localStorage.setItem('gp_matches', JSON.stringify(data.matches));
+            if (data.tournamentInfo) localStorage.setItem('gp_tournament_info', JSON.stringify(data.tournamentInfo));
+            if (data.adminPin) localStorage.setItem('gp_admin_pin', data.adminPin);
+          } catch {}
+
+          onSyncReceived(payload);
+        } else {
+          // Document does not exist yet; seed initial tournament
+          const initialPayload = {
+            teams: INITIAL_TEAMS,
+            players: INITIAL_PLAYERS,
+            matches: INITIAL_MATCHES,
+            tournamentInfo: INITIAL_TOURNAMENT_INFO,
+            adminPin: '1234',
+            lastUpdated: Date.now(),
+            senderId: 'initial_seed',
+          };
+          setDoc(docRef, initialPayload, { merge: true }).catch(() => {});
+          onSyncReceived({
+            type: 'SYNC_ALL',
+            ...initialPayload,
+            timestamp: Date.now(),
+          });
         }
-
-        // Keep localStorage offline cache up to date
-        try {
-          if (Array.isArray(data.teams)) localStorage.setItem('gp_teams', JSON.stringify(data.teams));
-          if (Array.isArray(data.players)) localStorage.setItem('gp_players', JSON.stringify(data.players));
-          if (Array.isArray(data.matches)) localStorage.setItem('gp_matches', JSON.stringify(data.matches));
-          if (data.tournamentInfo) localStorage.setItem('gp_tournament_info', JSON.stringify(data.tournamentInfo));
-          if (data.adminPin) localStorage.setItem('gp_admin_pin', data.adminPin);
-        } catch {}
-
-        onSyncReceived({
-          type: 'SYNC_ALL',
-          teams: Array.isArray(data.teams) && data.teams.length > 0 ? data.teams : undefined,
-          players: Array.isArray(data.players) && data.players.length > 0 ? data.players : undefined,
-          matches: Array.isArray(data.matches) && data.matches.length > 0 ? data.matches : undefined,
-          tournamentInfo: data.tournamentInfo,
-          adminPin: data.adminPin,
-          senderId: data.senderId || 'firestore-live',
-          timestamp: data.lastUpdated || Date.now(),
-          version: data.version,
-        });
       },
       (error) => {
-        console.warn('[FIRESTORE] onSnapshot listener warning:', error);
+        console.error('[FIRESTORE] Real-time listener error:', error);
       }
     );
   } catch (err) {
-    console.warn('[FIRESTORE] Real-time listener setup error:', err);
+    console.error('[FIRESTORE] Failed to attach onSnapshot listener:', err);
   }
 
-  // ⚡ 2. Cross-Tab Broadcast Channel (Zero Latency on same browser)
+  // Cross-Tab Broadcast Channel Handler
   const handleBroadcastMessage = (event: MessageEvent<SyncPayload>) => {
     if (!event.data || event.data.senderId === TAB_SESSION_ID) return;
     onSyncReceived(event.data);
   };
 
-  // 📱 3. Offline storage event fallback
-  const handleStorageEvent = (event: StorageEvent) => {
-    if (!event.key || !event.newValue) return;
-
-    if (
-      event.key === 'gp_teams' ||
-      event.key === 'gp_players' ||
-      event.key === 'gp_matches' ||
-      event.key === 'gp_tournament_info' ||
-      event.key === 'gp_admin_pin' ||
-      event.key === 'gp_sync_ping'
-    ) {
-      try {
-        const teams = JSON.parse(localStorage.getItem('gp_teams') || '[]');
-        const players = JSON.parse(localStorage.getItem('gp_players') || '[]');
-        const matches = JSON.parse(localStorage.getItem('gp_matches') || '[]');
-        const tournamentInfo = JSON.parse(localStorage.getItem('gp_tournament_info') || '{}');
-        const adminPin = localStorage.getItem('gp_admin_pin') || '1234';
-
-        onSyncReceived({
-          type: 'SYNC_ALL',
-          teams,
-          players,
-          matches,
-          tournamentInfo,
-          adminPin,
-          senderId: 'storage-event',
-          timestamp: Date.now(),
-        });
-      } catch (e) {
-        console.error('Storage sync error:', e);
-      }
-    }
-  };
-
   if (broadcastChannel) {
     broadcastChannel.addEventListener('message', handleBroadcastMessage);
   }
-  window.addEventListener('storage', handleStorageEvent);
 
   return () => {
     isSubscribed = false;
@@ -308,7 +263,6 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
     if (broadcastChannel) {
       broadcastChannel.removeEventListener('message', handleBroadcastMessage);
     }
-    window.removeEventListener('storage', handleStorageEvent);
   };
 }
 

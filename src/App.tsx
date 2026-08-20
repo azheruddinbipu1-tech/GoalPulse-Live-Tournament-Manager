@@ -40,26 +40,43 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('LIVE');
   const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [isFirestoreLoaded, setIsFirestoreLoaded] = useState<boolean>(false);
 
-  // Core Tournament State (Persisted in localStorage, defaults to empty clean state)
+  // Core Tournament State (Persisted in Cloud Firestore as Single Source of Truth)
   const [teams, setTeams] = useState<Team[]>(() => {
-    const saved = localStorage.getItem('gp_teams');
-    return saved ? JSON.parse(saved) : INITIAL_TEAMS;
+    try {
+      const saved = localStorage.getItem('gp_teams');
+      return saved ? JSON.parse(saved) : INITIAL_TEAMS;
+    } catch {
+      return INITIAL_TEAMS;
+    }
   });
 
   const [players, setPlayers] = useState<Player[]>(() => {
-    const saved = localStorage.getItem('gp_players');
-    return saved ? JSON.parse(saved) : INITIAL_PLAYERS;
+    try {
+      const saved = localStorage.getItem('gp_players');
+      return saved ? JSON.parse(saved) : INITIAL_PLAYERS;
+    } catch {
+      return INITIAL_PLAYERS;
+    }
   });
 
   const [matches, setMatches] = useState<Match[]>(() => {
-    const saved = localStorage.getItem('gp_matches');
-    return saved ? JSON.parse(saved) : INITIAL_MATCHES;
+    try {
+      const saved = localStorage.getItem('gp_matches');
+      return saved ? JSON.parse(saved) : INITIAL_MATCHES;
+    } catch {
+      return INITIAL_MATCHES;
+    }
   });
 
   const [tournamentInfo, setTournamentInfo] = useState<TournamentInfo>(() => {
-    const saved = localStorage.getItem('gp_tournament_info');
-    return saved ? JSON.parse(saved) : INITIAL_TOURNAMENT_INFO;
+    try {
+      const saved = localStorage.getItem('gp_tournament_info');
+      return saved ? JSON.parse(saved) : INITIAL_TOURNAMENT_INFO;
+    } catch {
+      return INITIAL_TOURNAMENT_INFO;
+    }
   });
 
   const [selectedMatchId, setSelectedMatchId] = useState<string>(() => {
@@ -73,52 +90,20 @@ export const App: React.FC = () => {
   });
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
-  // 🔄 Real-time Server Sync + Cross-Tab & Multi-Device Synchronization Listener
+  // 🔄 Real-time Firestore onSnapshot listener for instant multi-device sync
   useEffect(() => {
-    // Initial fetch from central server
-    fetchInitialServerState().then((serverData) => {
-      if (serverData) {
-        if (Array.isArray(serverData.teams) && serverData.teams.length > 0) setTeams(serverData.teams);
-        if (Array.isArray(serverData.players) && serverData.players.length > 0) setPlayers(serverData.players);
-        if (Array.isArray(serverData.matches) && serverData.matches.length > 0) setMatches(serverData.matches);
-        if (serverData.tournamentInfo) setTournamentInfo(serverData.tournamentInfo);
-        if (serverData.adminPin) setAdminPin(serverData.adminPin);
-        setLastSyncTime(serverData.timestamp || Date.now());
-      }
-    });
-
     const unsubscribe = subscribeToStateSync((payload: SyncPayload) => {
-      if (Array.isArray(payload.teams) && payload.teams.length > 0) setTeams(payload.teams);
-      if (Array.isArray(payload.players) && payload.players.length > 0) setPlayers(payload.players);
-      if (Array.isArray(payload.matches) && payload.matches.length > 0) setMatches(payload.matches);
-      if (payload.tournamentInfo) setTournamentInfo(payload.tournamentInfo);
-      if (payload.adminPin) setAdminPin(payload.adminPin);
-      setLastSyncTime(payload.timestamp || Date.now());
+      if (payload.teams !== undefined) setTeams(payload.teams);
+      if (payload.players !== undefined) setPlayers(payload.players);
+      if (payload.matches !== undefined) setMatches(payload.matches);
+      if (payload.tournamentInfo !== undefined) setTournamentInfo(payload.tournamentInfo);
+      if (payload.adminPin !== undefined) setAdminPin(payload.adminPin);
+      if (payload.timestamp) setLastSyncTime(payload.timestamp);
+      setIsFirestoreLoaded(true);
     });
 
     return () => unsubscribe();
   }, []);
-
-  // Sync to LocalStorage
-  useEffect(() => {
-    localStorage.setItem('gp_teams', JSON.stringify(teams));
-  }, [teams]);
-
-  useEffect(() => {
-    localStorage.setItem('gp_players', JSON.stringify(players));
-  }, [players]);
-
-  useEffect(() => {
-    localStorage.setItem('gp_matches', JSON.stringify(matches));
-  }, [matches]);
-
-  useEffect(() => {
-    localStorage.setItem('gp_tournament_info', JSON.stringify(tournamentInfo));
-  }, [tournamentInfo]);
-
-  useEffect(() => {
-    localStorage.setItem('gp_admin_pin', adminPin);
-  }, [adminPin]);
 
   // Keep selectedMatchId valid
   useEffect(() => {
@@ -127,7 +112,7 @@ export const App: React.FC = () => {
     }
   }, [matches, selectedMatchId]);
 
-  // Broadcast Helper to notify all other devices, tabs & components
+  // Unified Broadcast & Firestore write trigger
   const triggerGlobalSync = useCallback((updates: {
     teams?: Team[];
     players?: Player[];
@@ -135,17 +120,9 @@ export const App: React.FC = () => {
     tournamentInfo?: TournamentInfo;
     adminPin?: string;
   }) => {
-    const fullPayload = {
-      type: 'SYNC_ALL' as const,
-      teams: updates.teams || teams,
-      players: updates.players || players,
-      matches: updates.matches || matches,
-      tournamentInfo: updates.tournamentInfo || tournamentInfo,
-      adminPin: updates.adminPin || adminPin,
-    };
-    broadcastStateChange(fullPayload);
+    broadcastStateChange(updates);
     setLastSyncTime(Date.now());
-  }, [teams, players, matches, tournamentInfo, adminPin]);
+  }, []);
 
   // Calculate Standings Table Dynamically with 100% precision
   const standings = useMemo<StandingRow[]>(() => {
