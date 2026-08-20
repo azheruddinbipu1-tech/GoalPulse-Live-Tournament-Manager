@@ -16,6 +16,9 @@ export interface Player {
   fouls: number;
   saves: number;
   matchesPlayed: number;
+  isCaptain?: boolean;
+  isIconPlayer?: boolean;
+  potmAwards?: number;
 }
 
 export interface Team {
@@ -27,6 +30,8 @@ export interface Team {
   totalBudget: number; // in Millions (৳M)
   city: string;
   coach: string;
+  captainPlayerId?: string;
+  iconPlayerId?: string;
 }
 
 export type MatchStatus = 
@@ -66,6 +71,20 @@ export interface MatchEvent {
   timestamp: number;
 }
 
+export interface MatchStats {
+  possession: number; // Percentage (e.g. 55)
+  shots: number;
+  shotsOnTarget: number;
+  shotsOffTarget: number;
+  corners: number;
+  fouls: number;
+  offsides: number;
+  yellowCards: number;
+  redCards: number;
+  passes: number;
+  saves: number;
+}
+
 export interface Match {
   id: string;
   homeTeamId: string;
@@ -84,21 +103,48 @@ export interface Match {
   potmPlayerId?: string;
   potmPlayerName?: string;
   potmReason?: string;
+  referee?: string;
+  assistantReferees?: string;
+  homeStats?: MatchStats;
+  awayStats?: MatchStats;
 }
+
+export type NoticeCategory = 'LEAGUE' | 'MATCH_CHANGE' | 'ADMIN_EMERGENCY' | 'NEWS' | 'GENERAL';
 
 export interface NoticeItem {
   id: string;
   title: string;
   content: string;
   date: string;
+  category?: NoticeCategory;
   isImportant?: boolean;
   author?: string;
 }
 
+export interface GalleryMediaItem {
+  id: string;
+  title: string;
+  url: string;
+  category: 'MATCH' | 'TEAM' | 'CHAMPION' | 'VIDEO';
+  description?: string;
+  date?: string;
+}
+
+export interface TournamentSponsor {
+  name: string;
+  type: 'POWERED_BY' | 'CO_SPONSOR' | 'MEDIA_PARTNER';
+  logoUrl?: string;
+}
+
 export interface TournamentInfo {
   name: string;
+  edition: string;
+  category: string;
   tagline: string;
+  poweredBy: string;
+  coSponsors: string[];
   bannerPhotoUrl: string;
+  clubLogoUrl: string;
   facebookPageUrl: string;
   facebookGroupName?: string;
   venueName: string;
@@ -111,6 +157,7 @@ export interface TournamentInfo {
   rulesSummary: string;
   notices: NoticeItem[];
   galleryPhotos: string[];
+  mediaGallery?: GalleryMediaItem[];
 }
 
 export interface StandingRow {
@@ -128,3 +175,4 @@ export interface StandingRow {
   points: number;
   form: ('W' | 'D' | 'L')[];
 }
+

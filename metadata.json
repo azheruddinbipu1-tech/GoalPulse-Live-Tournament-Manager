@@ -1,6 +1,6 @@
 {
   "name": "GoalPulse Live Match & Tournament Manager",
-  "description": "Live football match tracking with goals, assists, fouls, yellow/red cards, score rollback, team budgets, player market values, standings table, top scorers leaderboard, and admin/public control modes.",
+  "description": "Complete live tournament manager for NPL Night Football Premier League 2026-2027, powered by Sky Star Boys Club, featuring live match events, in-depth statistics, points table, top scorers, team management, notice board, and official PDF match summaries.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

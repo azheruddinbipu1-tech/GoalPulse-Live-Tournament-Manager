@@ -450,6 +450,7 @@ export const App: React.FC = () => {
             onCreateMatch={handleCreateMatchFromData}
             onDeleteMatch={handleDeleteMatch}
             onNavigateToClubs={() => setActiveTab('CLUBS')}
+            tournamentInfo={tournamentInfo}
           />
         )}
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TournamentInfo, NoticeItem } from '../types';
+import { TournamentInfo, NoticeItem, NoticeCategory } from '../types';
 import { 
   Trophy, 
   Share2, 
@@ -16,7 +16,11 @@ import {
   Award, 
   BookOpen, 
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Filter,
+  Search,
+  Video,
+  Radio
 } from 'lucide-react';
 import { ImageUploadBox } from './ImageUploadBox';
 
@@ -37,6 +41,13 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
   const [showAddPhotoModal, setShowAddPhotoModal] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
+  // Notice filtering & search
+  const [noticeFilter, setNoticeFilter] = useState<'ALL' | 'IMPORTANT' | 'LEAGUE' | 'MATCH_CHANGE' | 'NEWS'>('ALL');
+  const [noticeSearch, setNoticeSearch] = useState('');
+
+  // Gallery filter
+  const [galleryCategory, setGalleryCategory] = useState<'ALL' | 'MATCH' | 'TEAM' | 'CHAMPION'>('ALL');
+
   // Edit Info Form State
   const [name, setName] = useState(info.name);
   const [tagline, setTagline] = useState(info.tagline);
@@ -55,6 +66,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
   // New Notice Form State
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
+  const [noticeCategory, setNoticeCategory] = useState<NoticeCategory>('LEAGUE');
   const [noticeIsImportant, setNoticeIsImportant] = useState(false);
 
   // New Gallery Photo Form State
@@ -107,6 +119,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
       title: noticeTitle,
       content: noticeContent,
       date: new Date().toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' }),
+      category: noticeCategory,
       isImportant: noticeIsImportant,
       author: info.organizerName || 'টুর্নামেন্ট কমিটি'
     };
@@ -118,6 +131,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
 
     setNoticeTitle('');
     setNoticeContent('');
+    setNoticeCategory('LEAGUE');
     setNoticeIsImportant(false);
     setShowAddNoticeModal(false);
   };
@@ -153,6 +167,50 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
     }
   };
 
+  // Filter notices
+  const filteredNotices = (info.notices || []).filter(n => {
+    if (noticeFilter === 'IMPORTANT' && !n.isImportant) return false;
+    if (noticeFilter === 'LEAGUE' && n.category !== 'LEAGUE') return false;
+    if (noticeFilter === 'MATCH_CHANGE' && n.category !== 'MATCH_CHANGE') return false;
+    if (noticeFilter === 'NEWS' && n.category !== 'NEWS') return false;
+
+    if (noticeSearch.trim()) {
+      const q = noticeSearch.toLowerCase();
+      return n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const getCategoryBadge = (category?: NoticeCategory) => {
+    switch (category) {
+      case 'ADMIN_EMERGENCY':
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase">
+            🚨 জরুরি নোটিশ
+          </span>
+        );
+      case 'MATCH_CHANGE':
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
+            🔄 সময়সূচি পরিবর্তন
+          </span>
+        );
+      case 'NEWS':
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] font-black uppercase">
+            📰 সংবাদ ও আপডেট
+          </span>
+        );
+      case 'LEAGUE':
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
+            📢 লীগ ঘোষণা
+          </span>
+        );
+    }
+  };
+
   return (
     <div className="space-y-8 pb-16">
       {/* 1. HERO BANNER & TOURNAMENT TITLE CARD */}
@@ -178,9 +236,14 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
         <div className="p-6 sm:p-8 -mt-12 sm:-mt-16 relative z-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="space-y-2 max-w-3xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-inner">
-                <Trophy className="w-3.5 h-3.5" />
-                <span>অফিসিয়াল টুর্নামেন্ট ইনফরমেশন সেন্টার</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-bold shadow-inner">
+                  <Trophy className="w-3.5 h-3.5" />
+                  <span>{info.edition || '৮ম বর্ষ'} • {info.category || 'এলাকাভিত্তিক নাইট ফুটবল টুর্নামেন্ট'}</span>
+                </div>
+                <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-xs font-bold">
+                  <span>⚡ Powered by {info.poweredBy || 'Sky Star Boys Club (Noyagaon)'}</span>
+                </div>
               </div>
               <h1 className="text-2xl sm:text-4xl font-black text-white font-display tracking-tight">
                 {info.name}
@@ -188,6 +251,18 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
               <p className="text-sm sm:text-base text-slate-300 font-medium">
                 {info.tagline}
               </p>
+
+              {/* Co-sponsors highlight */}
+              {info.coSponsors && info.coSponsors.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs text-slate-400 font-semibold">কো-স্পন্সর:</span>
+                  {info.coSponsors.map((s, idx) => (
+                    <span key={idx} className="text-xs font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2.5 py-0.5 rounded-lg">
+                      ⭐ {s}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-3 pt-2 text-xs text-slate-400">
                 <span className="flex items-center gap-1.5 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700/80">
                   <MapPin className="w-3.5 h-3.5 text-emerald-400" />
@@ -241,7 +316,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
           </div>
           <div>
             <h3 className="text-lg font-black text-white font-display flex items-center gap-2">
-              <span>অফিসিয়াল ফেসবুক পেজ ও কমিউনিটি</span>
+              <span>অফিসিয়াল ফেসবুক পেজ ও ফ্যান কমিউনিটি</span>
             </h3>
             <p className="text-xs text-slate-300 mt-1 max-w-xl">
               টুর্নামেন্টের সরাসরি লাইভ ভিডিও সম্প্রচার, ম্যাচ ফটোশুট, ম্যান অব দ্য ম্যাচ ইন্টারভিউ ও আকর্ষণীয় আপডেট পেতে আমাদের ফেসবুক পেজের সাথে যুক্ত থাকুন।
@@ -271,17 +346,17 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
         </div>
       </div>
 
-      {/* 3. GRID: PRIZE MONEY & RULES + NOTICE BOARD */}
+      {/* 3. GRID: PRIZE MONEY & RULES + NOTICE BOARD 📢 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: NOTICE BOARD 📢 */}
+        {/* Left 2 Cols: NOTICE BOARD WITH CATEGORIES & SEARCH */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center">
                 <Bell className="w-4 h-4" />
               </div>
               <h2 className="text-lg font-black text-white font-display">
-                টুর্নামেন্ট নোটিশ বোর্ড (Notice Board)
+                টুর্নামেন্ট নোটিশ ও ঘোষণা (Notice Board)
               </h2>
             </div>
 
@@ -296,9 +371,58 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
             )}
           </div>
 
-          {info.notices && info.notices.length > 0 ? (
+          {/* Filter Pills & Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-900/80 p-2 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => setNoticeFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  noticeFilter === 'ALL' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                সব ({info.notices?.length || 0})
+              </button>
+              <button
+                onClick={() => setNoticeFilter('IMPORTANT')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  noticeFilter === 'IMPORTANT' ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                জরুরি নোটিশ
+              </button>
+              <button
+                onClick={() => setNoticeFilter('LEAGUE')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  noticeFilter === 'LEAGUE' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                লীগ ঘোষণা
+              </button>
+              <button
+                onClick={() => setNoticeFilter('MATCH_CHANGE')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                  noticeFilter === 'MATCH_CHANGE' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                সময়সূচি পরিবর্তন
+              </button>
+            </div>
+
+            <div className="relative sm:w-48">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="নোটিশ খুঁজুন..."
+                value={noticeSearch}
+                onChange={(e) => setNoticeSearch(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          {filteredNotices.length > 0 ? (
             <div className="space-y-3">
-              {info.notices.map((notice) => (
+              {filteredNotices.map((notice) => (
                 <div
                   key={notice.id}
                   className={`rounded-2xl border p-5 transition-all ${
@@ -308,11 +432,12 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5 flex-1">
+                    <div className="space-y-2 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
+                        {getCategoryBadge(notice.category)}
                         {notice.isImportant && (
-                          <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase tracking-wider">
-                            🚨 জরুরী ঘোষণা
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black uppercase">
+                            ⭐ গুরুত্বপূর্ণ
                           </span>
                         )}
                         <h3 className="text-sm font-bold text-white font-display">
@@ -344,7 +469,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
             </div>
           ) : (
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-xs">
-              এখনো কোনো নোটিশ প্রকাশ করা হয়নি।
+              কোনো নোটিশ পাওয়া যায়নি।
             </div>
           )}
         </div>
@@ -426,7 +551,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-black text-white font-display">
-                টুর্নামেন্ট ছবির গ্যালারি (Photo Gallery)
+                টুর্নামেন্ট মিডিয়া ও ছবির গ্যালারি (Media Gallery)
               </h2>
               <p className="text-xs text-slate-400">মাঠের উত্তেজনা, ট্রফি ও প্লেয়ারদের বিশেষ মুহূর্তসমূহ</p>
             </div>
@@ -481,17 +606,31 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
           <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-8 text-center">
             <ImageIcon className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-50" />
             <p className="text-xs text-slate-400">এখনো কোনো ছবি যুক্ত করা হয়নি।</p>
-            {isAdmin && (
-              <button
-                onClick={() => setShowAddPhotoModal(true)}
-                className="mt-3 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold border border-slate-700 transition-all cursor-pointer"
-              >
-                📷 প্রথম ছবি আপলোড করুন
-              </button>
-            )}
           </div>
         )}
       </div>
+
+      {/* Lightbox for Selected Photo */}
+      {selectedPhoto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+          onClick={() => setSelectedPhoto(null)}
+        >
+          <div className="max-w-4xl max-h-[85vh] relative" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={selectedPhoto} 
+              alt="Full view" 
+              className="max-w-full max-h-[80vh] rounded-2xl object-contain border border-slate-700 shadow-2xl" 
+            />
+            <button
+              onClick={() => setSelectedPhoto(null)}
+              className="absolute -top-10 right-0 text-white bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              বন্ধ করুন (Close ✕)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: EDIT TOURNAMENT INFO ✏️ */}
       {showEditInfoModal && (
@@ -591,7 +730,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">পুরস্কার ও প্রাইজমানি বিবরণ</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">প্রাইজমানি বিবরণী</label>
                 <textarea
                   rows={2}
                   value={prizeMoney}
@@ -601,16 +740,16 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">খেলার সংক্ষিপ্ত নিয়মাবলী</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">নিয়মাবলী সংক্ষেপ</label>
                 <textarea
                   rows={3}
                   value={rulesSummary}
                   onChange={(e) => setRulesSummary(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowEditInfoModal(false)}
@@ -620,7 +759,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950"
                 >
                   সংরক্ষণ করুন
                 </button>
@@ -633,7 +772,7 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
       {/* MODAL 2: ADD NEW NOTICE 📢 */}
       {showAddNoticeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
             <h3 className="text-lg font-black text-white font-display mb-4 flex items-center gap-2">
               <Bell className="w-5 h-5 text-amber-400" />
               <span>নতুন নোটিশ প্রকাশ করুন</span>
@@ -641,11 +780,26 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
 
             <form onSubmit={handleAddNoticeSubmit} className="space-y-4">
               <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">নোটিশ ক্যাটাগরি</label>
+                <select
+                  value={noticeCategory}
+                  onChange={(e) => setNoticeCategory(e.target.value as NoticeCategory)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                >
+                  <option value="LEAGUE">📢 লীগ ঘোষণা (League Announcement)</option>
+                  <option value="ADMIN_EMERGENCY">🚨 জরুরি নোটিশ (Emergency Notice)</option>
+                  <option value="MATCH_CHANGE">🔄 সময়সূচি পরিবর্তন (Schedule Change)</option>
+                  <option value="NEWS">📰 টুর্নামেন্ট সংবাদ ও মিডিয়া (News)</option>
+                  <option value="GENERAL">📌 সাধারণ তথ্য (General)</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">নোটিশের শিরোনাম *</label>
                 <input
                   type="text"
                   required
-                  placeholder="যেমন: ৩য় রাউন্ডের ম্যাচ সময়সূচি পরিবর্তন"
+                  placeholder="যেমন: আজকের ফ্লাডলাইট ম্যাচের সময়সূচি..."
                   value={noticeTitle}
                   onChange={(e) => setNoticeTitle(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
@@ -653,31 +807,31 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">নোটিশের পূর্ণ বিবরণ *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">বিস্তারিত বিবরণ *</label>
                 <textarea
-                  rows={4}
                   required
-                  placeholder="বিস্তারিত তথ্য লিখুন..."
+                  rows={4}
+                  placeholder="নোটিশের সম্পূর্ণ বিবরণ এখানে লিখুন..."
                   value={noticeContent}
                   onChange={(e) => setNoticeContent(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
                 />
               </div>
 
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-slate-950 border border-slate-800">
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="importantNotice"
                   checked={noticeIsImportant}
                   onChange={(e) => setNoticeIsImportant(e.target.checked)}
-                  className="w-4 h-4 rounded text-rose-500 focus:ring-rose-500"
+                  className="rounded border-slate-800 text-rose-600 focus:ring-rose-500"
                 />
-                <label htmlFor="importantNotice" className="text-xs font-bold text-rose-400 cursor-pointer">
-                  🚨 এটি একটি জরুরী (High Priority) ঘোষণা হিসেবে দেখান
+                <label htmlFor="importantNotice" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                  🚨 জরুরি ঘোষণা হিসেবে হাইলাইট করুন
                 </label>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddNoticeModal(false)}
@@ -687,9 +841,9 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-950"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950"
                 >
-                  নোটিশ প্রকাশ করুন
+                  প্রকাশ করুন
                 </button>
               </div>
             </form>
@@ -702,21 +856,21 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl">
             <h3 className="text-lg font-black text-white font-display mb-4 flex items-center gap-2">
-              <ImageIcon className="w-5 h-5 text-teal-400" />
-              <span>গ্যালারিতে নতুন ছবি আপলোড</span>
+              <ImageIcon className="w-5 h-5 text-emerald-400" />
+              <span>গ্যালারিতে নতুন ছবি যোগ করুন</span>
             </h3>
 
             <form onSubmit={handleAddPhotoSubmit} className="space-y-4">
               <ImageUploadBox
-                label="ছবি নির্বাচন করুন"
-                sublabel="গ্যালারি বা ক্যামেরা থেকে ম্যাচ/টুর্নামেন্টের ছবি নির্বাচন করুন"
+                label="📷 ছবি আপলোড করুন"
+                sublabel="ডিভাইস থেকে টুর্নামেন্টের ছবি বা মোমেন্ট সিলেক্ট করুন"
                 value={newGalleryPhoto}
                 onChange={setNewGalleryPhoto}
-                aspectRatio="square"
-                fallbackText="ছবি"
+                aspectRatio="video"
+                fallbackText="ফটো"
               />
 
-              <div className="flex items-center justify-end gap-2 pt-3">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddPhotoModal(false)}
@@ -727,35 +881,12 @@ export const TournamentInfoView: React.FC<TournamentInfoViewProps> = ({
                 <button
                   type="submit"
                   disabled={!newGalleryPhoto}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-md shadow-emerald-950 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-emerald-950"
                 >
                   গ্যালারিতে যুক্ত করুন
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* LIGHTBOX FOR FULL IMAGE PREVIEW 🔍 */}
-      {selectedPhoto && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn cursor-pointer"
-          onClick={() => setSelectedPhoto(null)}
-        >
-          <div className="max-w-4xl max-h-[90vh] p-2 relative" onClick={(e) => e.stopPropagation()}>
-            <img 
-              src={selectedPhoto} 
-              alt="Full view" 
-              className="max-h-[85vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain mx-auto"
-              referrerPolicy="no-referrer"
-            />
-            <button
-              onClick={() => setSelectedPhoto(null)}
-              className="absolute top-4 right-4 bg-black/70 hover:bg-black text-white px-3 py-1.5 rounded-full text-xs font-bold border border-white/20"
-            >
-              ✕ বন্ধ করুন
-            </button>
           </div>
         </div>
       )}

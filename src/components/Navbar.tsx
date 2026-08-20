@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-lg sm:text-xl tracking-tight text-white font-display">
-                  GoalPulse <span className="text-emerald-400">Live</span>
+                  NPL <span className="text-emerald-400">Night Football</span>
                 </span>
                 {liveMatchCount > 0 && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse">
@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-400 font-medium hidden sm:block">
-                Super League Tournament & Event Manager
+                ৮ম বর্ষ • Powered by Sky Star Boys Club
               </p>
             </div>
           </div>
