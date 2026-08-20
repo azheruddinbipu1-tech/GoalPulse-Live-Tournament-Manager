@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "TournamentState": {
+      "title": "TournamentState",
+      "description": "Real-time tournament data including teams, players, matches, and metadata.",
+      "type": "object",
+      "properties": {
+        "teams": { "type": "array", "description": "List of teams participating in tournament" },
+        "players": { "type": "array", "description": "List of registered players" },
+        "matches": { "type": "array", "description": "List of scheduled, live, and completed matches" },
+        "tournamentInfo": { "type": "object", "description": "Tournament metadata and rules" },
+        "adminPin": { "type": "string", "description": "Admin security PIN" },
+        "lastUpdated": { "type": "number", "description": "Last updated epoch timestamp" },
+        "version": { "type": "number", "description": "State version counter" }
+      }
+    }
+  },
+  "firestore": {
+    "/tournament_state/{documentId}": {
+      "schema": "TournamentState",
+      "description": "Global tournament state documents synced across all devices in real-time."
+    }
+  }
+}
