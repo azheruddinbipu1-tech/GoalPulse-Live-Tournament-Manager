@@ -7,7 +7,7 @@ import { INITIAL_TEAMS, INITIAL_PLAYERS, INITIAL_MATCHES, INITIAL_TOURNAMENT_INF
 export const TOURNAMENT_COLLECTION = 'tournament_state';
 export const TOURNAMENT_DOC_ID = 'main_state';
 
-// Cross-tab broadcast channel for instant multi-tab sync on same machine
+// Cross-tab broadcast channel for instantaneous reflection on the same machine
 const SYNC_CHANNEL_NAME = 'goalpulse_realtime_sync_channel';
 
 export interface SyncPayload {
@@ -21,7 +21,7 @@ export interface SyncPayload {
   timestamp?: number;
 }
 
-// Generate unique sender ID per browser tab session
+// Generate unique sender ID per browser tab/device session
 export const TAB_SESSION_ID = `tab-${Math.random().toString(36).substring(2, 9)}-${Date.now()}`;
 
 let broadcastChannel: BroadcastChannel | null = null;
@@ -31,6 +31,29 @@ try {
   }
 } catch {
   broadcastChannel = null;
+}
+
+/**
+ * Deeply sanitizes data to remove `undefined` values and ensure 100% Firestore-compliant JSON.
+ * Firestore setDoc/updateDoc strictly rejects `undefined` property values.
+ */
+export function cleanFirestoreData<T>(input: T): T {
+  if (input === null || input === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(input)) {
+    return input.map(item => cleanFirestoreData(item)) as any;
+  }
+  if (typeof input === 'object' && input.constructor === Object) {
+    const output: Record<string, any> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) {
+        output[key] = cleanFirestoreData(value);
+      }
+    }
+    return output as any;
+  }
+  return input;
 }
 
 /**
@@ -46,20 +69,23 @@ export async function pushStateToFirestore(payload: {
   try {
     const docRef = doc(db, TOURNAMENT_COLLECTION, TOURNAMENT_DOC_ID);
 
-    const dataToSave: Record<string, any> = {
+    const rawData: Record<string, any> = {
       lastUpdated: Date.now(),
       senderId: TAB_SESSION_ID,
     };
 
-    if (payload.teams !== undefined) dataToSave.teams = payload.teams;
-    if (payload.players !== undefined) dataToSave.players = payload.players;
-    if (payload.matches !== undefined) dataToSave.matches = payload.matches;
-    if (payload.tournamentInfo !== undefined) dataToSave.tournamentInfo = payload.tournamentInfo;
-    if (payload.adminPin !== undefined) dataToSave.adminPin = payload.adminPin;
+    if (payload.teams !== undefined) rawData.teams = payload.teams;
+    if (payload.players !== undefined) rawData.players = payload.players;
+    if (payload.matches !== undefined) rawData.matches = payload.matches;
+    if (payload.tournamentInfo !== undefined) rawData.tournamentInfo = payload.tournamentInfo;
+    if (payload.adminPin !== undefined) rawData.adminPin = payload.adminPin;
 
-    await setDoc(docRef, dataToSave, { merge: true });
+    // Sanitize completely to remove any `undefined` values
+    const sanitizedData = cleanFirestoreData(rawData);
 
-    // Update local cache
+    await setDoc(docRef, sanitizedData, { merge: true });
+
+    // Update local offline cache in background
     try {
       if (payload.teams !== undefined) localStorage.setItem('gp_teams', JSON.stringify(payload.teams));
       if (payload.players !== undefined) localStorage.setItem('gp_players', JSON.stringify(payload.players));
@@ -70,7 +96,7 @@ export async function pushStateToFirestore(payload: {
 
     return true;
   } catch (err) {
-    console.error('[FIRESTORE] Cloud Firestore write error:', err);
+    console.error('[FIRESTORE] Cloud Firestore write failed:', err);
     return false;
   }
 }
@@ -92,7 +118,7 @@ export function broadcastStateChange(payload: {
     timestamp: Date.now(),
   };
 
-  // 1. Cross-tab channel for instantaneous local reflection
+  // 1. Cross-tab channel for instantaneous local tab reflection
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage(fullPayload);
@@ -101,7 +127,7 @@ export function broadcastStateChange(payload: {
     }
   }
 
-  // 2. Direct Cloud Firestore Push (Single Source of Truth)
+  // 2. Direct Cloud Firestore Push (Central Single Source of Truth)
   pushStateToFirestore(payload);
 }
 
@@ -126,7 +152,7 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
         timestamp: data.lastUpdated || Date.now(),
       };
     } else {
-      // Initialize Firestore document with initial data once
+      // Initialize Firestore document with initial tournament seeds
       const initialPayload = {
         teams: INITIAL_TEAMS,
         players: INITIAL_PLAYERS,
@@ -136,7 +162,8 @@ export async function fetchInitialServerState(): Promise<SyncPayload | null> {
         lastUpdated: Date.now(),
         senderId: 'initial_seed',
       };
-      setDoc(docRef, initialPayload, { merge: true }).catch(() => {});
+      const sanitized = cleanFirestoreData(initialPayload);
+      setDoc(docRef, sanitized, { merge: true }).catch(() => {});
 
       return {
         type: 'SYNC_ALL',
@@ -191,7 +218,7 @@ export function subscribeToStateSync(
         if (snapshot.exists()) {
           const data = snapshot.data();
 
-          // Don't process echo events from our own tab if it is a pending write we just made
+          // Don't process pending local echoes if originated from this tab session
           if (data.senderId === TAB_SESSION_ID && snapshot.metadata.hasPendingWrites) {
             return;
           }
@@ -218,7 +245,7 @@ export function subscribeToStateSync(
 
           onSyncReceived(payload);
         } else {
-          // Document does not exist yet; seed initial tournament
+          // Document does not exist yet in Firestore; seed initial data
           const initialPayload = {
             teams: INITIAL_TEAMS,
             players: INITIAL_PLAYERS,
@@ -228,7 +255,8 @@ export function subscribeToStateSync(
             lastUpdated: Date.now(),
             senderId: 'initial_seed',
           };
-          setDoc(docRef, initialPayload, { merge: true }).catch(() => {});
+          const sanitized = cleanFirestoreData(initialPayload);
+          setDoc(docRef, sanitized, { merge: true }).catch(() => {});
           onSyncReceived({
             type: 'SYNC_ALL',
             ...initialPayload,
@@ -237,7 +265,7 @@ export function subscribeToStateSync(
         }
       },
       (error) => {
-        console.error('[FIRESTORE] Real-time listener error:', error);
+        console.error('[FIRESTORE] Real-time onSnapshot listener error:', error);
       }
     );
   } catch (err) {
