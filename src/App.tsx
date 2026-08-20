@@ -31,6 +31,7 @@ import {
   subscribeToStateSync, 
   cascadePlayerUpdate,
   recalculatePlayerStatsFromMatches,
+  fetchInitialServerState,
   SyncPayload
 } from './utils/sync';
 
@@ -72,8 +73,30 @@ export const App: React.FC = () => {
   });
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
-  // 🔄 Real-time Cross-Tab & Multi-Window Synchronization Listener
+  // 🔄 Real-time Server Sync + Cross-Tab & Multi-Device Synchronization Listener
   useEffect(() => {
+    // Initial fetch from central server
+    fetchInitialServerState().then((serverData) => {
+      if (serverData) {
+        if (serverData.teams && serverData.teams.length > 0) setTeams(serverData.teams);
+        if (serverData.players && serverData.players.length > 0) setPlayers(serverData.players);
+        if (serverData.matches && serverData.matches.length > 0) setMatches(serverData.matches);
+        if (serverData.tournamentInfo) setTournamentInfo(serverData.tournamentInfo);
+        if (serverData.adminPin) setAdminPin(serverData.adminPin);
+        setLastSyncTime(Date.now());
+      } else {
+        // If server has no state yet, initialize it with current state
+        broadcastStateChange({
+          type: 'SYNC_ALL',
+          teams,
+          players,
+          matches,
+          tournamentInfo,
+          adminPin,
+        });
+      }
+    });
+
     const unsubscribe = subscribeToStateSync((payload: SyncPayload) => {
       if (payload.teams) setTeams(payload.teams);
       if (payload.players) setPlayers(payload.players);

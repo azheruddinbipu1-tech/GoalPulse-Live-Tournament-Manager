@@ -80,6 +80,75 @@ export const ClubsBudgetView: React.FC<ClubsBudgetViewProps> = ({
     setTeamCoach(team.coach);
   };
 
+  const handleSaveTeamSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teamName) return;
+
+    const teamToSave: Team = {
+      id: editingTeam ? editingTeam.id : `team-${Date.now()}`,
+      name: teamName,
+      shortName: teamShortName.trim().toUpperCase() || teamName.slice(0, 3).toUpperCase(),
+      logoUrl: teamLogoUrl,
+      primaryColorHex: editingTeam?.primaryColorHex || '#10B981',
+      totalBudget: Number(teamBudget) || 100,
+      city: teamCity || 'Dhaka',
+      coach: teamCoach || 'Head Coach'
+    };
+
+    onSaveTeam(teamToSave);
+    setSelectedTeamId(teamToSave.id);
+    setEditingTeam(null);
+    setShowAddTeamModal(false);
+  };
+
+  const handleOpenEditPlayer = (player: Player) => {
+    setEditingPlayer(player);
+    setPlayerName(player.name);
+    setPlayerJersey(player.jerseyNumber);
+    setPlayerPosition(player.position);
+    setPlayerPhotoUrl(player.photoUrl);
+    setPlayerPrice(player.purchasePrice);
+    setPlayerTeamId(player.teamId);
+  };
+
+  const handleOpenAddPlayer = () => {
+    setEditingPlayer(null);
+    setPlayerName('');
+    setPlayerJersey(teamPlayers.length + 1);
+    setPlayerPosition('FORWARD');
+    setPlayerPhotoUrl('');
+    setPlayerPrice(15);
+    setPlayerTeamId(currentTeam?.id || '');
+    setShowAddPlayerModal(true);
+  };
+
+  const handleSavePlayerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!playerName) return;
+
+    const playerToSave: Player = {
+      id: editingPlayer ? editingPlayer.id : `p-${Date.now()}`,
+      teamId: playerTeamId || currentTeam?.id || '',
+      name: playerName,
+      jerseyNumber: Number(playerJersey) || 9,
+      position: playerPosition,
+      photoUrl: playerPhotoUrl,
+      purchasePrice: Number(playerPrice) || 5,
+      nationality: editingPlayer?.nationality || 'Bangladesh',
+      goals: editingPlayer?.goals || 0,
+      assists: editingPlayer?.assists || 0,
+      yellowCards: editingPlayer?.yellowCards || 0,
+      redCards: editingPlayer?.redCards || 0,
+      fouls: editingPlayer?.fouls || 0,
+      saves: editingPlayer?.saves || 0,
+      matchesPlayed: editingPlayer?.matchesPlayed || 0
+    };
+
+    onSavePlayer(playerToSave);
+    setEditingPlayer(null);
+    setShowAddPlayerModal(false);
+  };
+
   if (!currentTeam) {
     return (
       <div className="space-y-6 pb-12">
@@ -223,75 +292,6 @@ export const ClubsBudgetView: React.FC<ClubsBudgetViewProps> = ({
       </div>
     );
   }
-
-  const handleSaveTeamSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!teamName) return;
-
-    const teamToSave: Team = {
-      id: editingTeam ? editingTeam.id : `team-${Date.now()}`,
-      name: teamName,
-      shortName: teamShortName.trim().toUpperCase() || teamName.slice(0, 3).toUpperCase(),
-      logoUrl: teamLogoUrl,
-      primaryColorHex: editingTeam?.primaryColorHex || '#10B981',
-      totalBudget: Number(teamBudget) || 100,
-      city: teamCity || 'Dhaka',
-      coach: teamCoach || 'Head Coach'
-    };
-
-    onSaveTeam(teamToSave);
-    setSelectedTeamId(teamToSave.id);
-    setEditingTeam(null);
-    setShowAddTeamModal(false);
-  };
-
-  const handleOpenEditPlayer = (player: Player) => {
-    setEditingPlayer(player);
-    setPlayerName(player.name);
-    setPlayerJersey(player.jerseyNumber);
-    setPlayerPosition(player.position);
-    setPlayerPhotoUrl(player.photoUrl);
-    setPlayerPrice(player.purchasePrice);
-    setPlayerTeamId(player.teamId);
-  };
-
-  const handleOpenAddPlayer = () => {
-    setEditingPlayer(null);
-    setPlayerName('');
-    setPlayerJersey(teamPlayers.length + 1);
-    setPlayerPosition('FORWARD');
-    setPlayerPhotoUrl('');
-    setPlayerPrice(15);
-    setPlayerTeamId(currentTeam.id);
-    setShowAddPlayerModal(true);
-  };
-
-  const handleSavePlayerSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!playerName) return;
-
-    const playerToSave: Player = {
-      id: editingPlayer ? editingPlayer.id : `p-${Date.now()}`,
-      teamId: playerTeamId || currentTeam.id,
-      name: playerName,
-      jerseyNumber: Number(playerJersey) || 9,
-      position: playerPosition,
-      photoUrl: playerPhotoUrl,
-      purchasePrice: Number(playerPrice) || 5,
-      nationality: editingPlayer?.nationality || 'Bangladesh',
-      goals: editingPlayer?.goals || 0,
-      assists: editingPlayer?.assists || 0,
-      yellowCards: editingPlayer?.yellowCards || 0,
-      redCards: editingPlayer?.redCards || 0,
-      fouls: editingPlayer?.fouls || 0,
-      saves: editingPlayer?.saves || 0,
-      matchesPlayed: editingPlayer?.matchesPlayed || 0
-    };
-
-    onSavePlayer(playerToSave);
-    setEditingPlayer(null);
-    setShowAddPlayerModal(false);
-  };
 
   // Budget calculations
   const totalSpent = teamPlayers.reduce((sum, p) => sum + (p.purchasePrice || 0), 0);

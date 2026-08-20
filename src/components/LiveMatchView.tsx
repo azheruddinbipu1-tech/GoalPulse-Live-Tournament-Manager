@@ -130,6 +130,20 @@ export const LiveMatchView: React.FC<LiveMatchViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
+  // ⏱️ Auto-advance match clock by 1 minute when clock is active (Admin side)
+  useEffect(() => {
+    if (!currentMatch?.isClockRunning || !isAdmin) return;
+    const interval = setInterval(() => {
+      onUpdateMatchStatus(
+        currentMatch.id,
+        currentMatch.status,
+        currentMatch.currentMinute + 1,
+        true
+      );
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [currentMatch?.id, currentMatch?.isClockRunning, currentMatch?.currentMinute, currentMatch?.status, isAdmin]);
+
   const toggleMatchReminder = (matchId: string, matchTitle: string) => {
     const updated = { ...reminders, [matchId]: !reminders[matchId] };
     setReminders(updated);
@@ -759,7 +773,7 @@ export const LiveMatchView: React.FC<LiveMatchViewProps> = ({
                     Math.max(0, currentMatch.currentMinute - 1),
                     currentMatch.isClockRunning
                   )}
-                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs"
+                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs cursor-pointer"
                   title="-1 Minute"
                 >
                   <Minus className="w-3.5 h-3.5" />
@@ -772,10 +786,27 @@ export const LiveMatchView: React.FC<LiveMatchViewProps> = ({
                     currentMatch.currentMinute + 1,
                     currentMatch.isClockRunning
                   )}
-                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs"
+                  className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg text-xs cursor-pointer"
                   title="+1 Minute"
                 >
                   <Plus className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => onUpdateMatchStatus(
+                    currentMatch.id,
+                    currentMatch.status,
+                    currentMatch.currentMinute,
+                    !currentMatch.isClockRunning
+                  )}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                    currentMatch.isClockRunning
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                  }`}
+                  title={currentMatch.isClockRunning ? 'টাইমার পজ করুন' : 'ম্যাচ টাইমার চালু করুন'}
+                >
+                  {currentMatch.isClockRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                  <span className="hidden sm:inline">{currentMatch.isClockRunning ? 'পজ' : 'রান'}</span>
                 </button>
               </div>
 
