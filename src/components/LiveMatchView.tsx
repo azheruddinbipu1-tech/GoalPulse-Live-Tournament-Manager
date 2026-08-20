@@ -1042,7 +1042,11 @@ export const LiveMatchView: React.FC<LiveMatchViewProps> = ({
           ) : (
             <div className="space-y-3">
               {currentMatch.events.map(ev => {
-                const team = teams.find(t => t.id === ev.teamId);
+                const livePlayer = players.find(p => p.id === ev.playerId);
+                const liveAssist = ev.assistPlayerId ? players.find(p => p.id === ev.assistPlayerId) : undefined;
+                const team = teams.find(t => t.id === (livePlayer?.teamId || ev.teamId));
+                const displayedPlayerName = livePlayer?.name || ev.playerName;
+                const displayedAssistName = liveAssist?.name || ev.assistPlayerName;
 
                 return (
                   <div
@@ -1069,13 +1073,13 @@ export const LiveMatchView: React.FC<LiveMatchViewProps> = ({
                           <span className="text-base">
                             {ev.type === 'GOAL' ? '⚽' : ev.type === 'PENALTY_GOAL' ? '🥅' : ev.type === 'OWN_GOAL' ? '💥' : ev.type === 'YELLOW_CARD' ? '🟨' : ev.type === 'RED_CARD' ? '🟥' : ev.type === 'SUBSTITUTION' ? '🔄' : ev.type === 'SAVE' ? '🧤' : '🛑'}
                           </span>
-                          <span className="font-bold text-sm text-white">{ev.playerName}</span>
-                          <span className="text-xs text-slate-400">({team?.shortName})</span>
+                          <span className="font-bold text-sm text-white">{displayedPlayerName}</span>
+                          <span className="text-xs text-slate-400">({team?.shortName || team?.name})</span>
                         </div>
 
-                        {ev.assistPlayerName && (
+                        {displayedAssistName && (
                           <p className="text-xs text-slate-400 mt-0.5">
-                            👟 অ্যাসিস্ট: <span className="text-slate-300 font-medium">{ev.assistPlayerName}</span>
+                            👟 অ্যাসিস্ট: <span className="text-slate-300 font-medium">{displayedAssistName}</span>
                           </p>
                         )}
 

@@ -11,7 +11,8 @@ import {
   Download,
   Smartphone,
   Info,
-  Bell
+  Bell,
+  RefreshCw
 } from 'lucide-react';
 
 export type TabType = 'LIVE' | 'STANDINGS' | 'LEADERBOARD' | 'CLUBS' | 'INFO' | 'ADMIN';
@@ -23,6 +24,7 @@ interface NavbarProps {
   onToggleAdmin: () => void;
   onOpenInstallModal: () => void;
   liveMatchCount: number;
+  lastSyncTime?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -31,7 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdmin,
   onToggleAdmin,
   onOpenInstallModal,
-  liveMatchCount
+  liveMatchCount,
+  lastSyncTime
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
@@ -136,6 +139,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* Real-time Global Sync Pill */}
+            <div
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950/80 border border-emerald-500/30 text-[11px] font-bold text-emerald-400 shadow-inner"
+              title="এক জায়গায় পরিবর্তন করলে সকল ট্যাব ও ভিউতে স্বয়ংক্রিয়ভাবে রিয়েল-টাইমে আপডেট হয়"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>লাইভ সিঙ্ক</span>
+            </div>
+
             <button
               onClick={onOpenInstallModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-bold border border-emerald-500/40 transition-all cursor-pointer"

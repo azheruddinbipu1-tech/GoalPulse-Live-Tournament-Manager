@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Team, 
   Player, 
@@ -26,11 +26,19 @@ import { TournamentInfoView } from './components/TournamentInfoView';
 import { AdminHubView } from './components/AdminHubView';
 import { AdminPinModal } from './components/AdminPinModal';
 import { InstallAppModal } from './components/InstallAppModal';
+import { 
+  broadcastStateChange, 
+  subscribeToStateSync, 
+  cascadePlayerUpdate,
+  recalculatePlayerStatsFromMatches,
+  SyncPayload
+} from './utils/sync';
 
 export const App: React.FC = () => {
   // Navigation
   const [activeTab, setActiveTab] = useState<TabType>('LIVE');
   const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
 
   // Core Tournament State (Persisted in localStorage, defaults to empty clean state)
   const [teams, setTeams] = useState<Team[]>(() => {
@@ -64,6 +72,20 @@ export const App: React.FC = () => {
   });
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
 
+  // 🔄 Real-time Cross-Tab & Multi-Window Synchronization Listener
+  useEffect(() => {
+    const unsubscribe = subscribeToStateSync((payload: SyncPayload) => {
+      if (payload.teams) setTeams(payload.teams);
+      if (payload.players) setPlayers(payload.players);
+      if (payload.matches) setMatches(payload.matches);
+      if (payload.tournamentInfo) setTournamentInfo(payload.tournamentInfo);
+      if (payload.adminPin) setAdminPin(payload.adminPin);
+      setLastSyncTime(Date.now());
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem('gp_teams', JSON.stringify(teams));
@@ -92,7 +114,22 @@ export const App: React.FC = () => {
     }
   }, [matches, selectedMatchId]);
 
-  // Calculate Standings Table Dynamically
+  // Broadcast Helper to notify all other tabs & components
+  const triggerGlobalSync = useCallback((updates: {
+    teams?: Team[];
+    players?: Player[];
+    matches?: Match[];
+    tournamentInfo?: TournamentInfo;
+    adminPin?: string;
+  }) => {
+    broadcastStateChange({
+      type: 'SYNC_ALL',
+      ...updates
+    });
+    setLastSyncTime(Date.now());
+  }, []);
+
+  // Calculate Standings Table Dynamically with 100% precision
   const standings = useMemo<StandingRow[]>(() => {
     const statsMap = new Map<string, StandingRow>();
 
@@ -171,59 +208,59 @@ export const App: React.FC = () => {
     };
 
     // 1. Update Match score and append event
-    setMatches(prevMatches =>
-      prevMatches.map(m => {
-        if (m.id === newEvent.matchId) {
-          let updatedHomeScore = m.homeScore;
-          let updatedAwayScore = m.awayScore;
+    const updatedMatches = matches.map(m => {
+      if (m.id === newEvent.matchId) {
+        let updatedHomeScore = m.homeScore;
+        let updatedAwayScore = m.awayScore;
 
-          if (newEvent.type === 'GOAL' || newEvent.type === 'PENALTY_GOAL') {
-            if (newEvent.teamId === m.homeTeamId) updatedHomeScore += 1;
-            else if (newEvent.teamId === m.awayTeamId) updatedAwayScore += 1;
-          } else if (newEvent.type === 'OWN_GOAL') {
-            if (newEvent.teamId === m.homeTeamId) updatedAwayScore += 1;
-            else if (newEvent.teamId === m.awayTeamId) updatedHomeScore += 1;
-          }
-
-          return {
-            ...m,
-            homeScore: updatedHomeScore,
-            awayScore: updatedAwayScore,
-            events: [...m.events, newEvent]
-          };
+        if (newEvent.type === 'GOAL' || newEvent.type === 'PENALTY_GOAL') {
+          if (newEvent.teamId === m.homeTeamId) updatedHomeScore += 1;
+          else if (newEvent.teamId === m.awayTeamId) updatedAwayScore += 1;
+        } else if (newEvent.type === 'OWN_GOAL') {
+          if (newEvent.teamId === m.homeTeamId) updatedAwayScore += 1;
+          else if (newEvent.teamId === m.awayTeamId) updatedHomeScore += 1;
         }
-        return m;
-      })
-    );
+
+        return {
+          ...m,
+          homeScore: updatedHomeScore,
+          awayScore: updatedAwayScore,
+          events: [...m.events, newEvent]
+        };
+      }
+      return m;
+    });
 
     // 2. Update Player stats (Goals, Assists, Cards, Fouls, Saves)
-    setPlayers(prevPlayers =>
-      prevPlayers.map(p => {
-        if (p.id === newEvent.playerId) {
-          let g = p.goals;
-          let a = p.assists;
-          let y = p.yellowCards;
-          let r = p.redCards;
-          let f = p.fouls;
-          let s = p.saves;
+    const updatedPlayers = players.map(p => {
+      if (p.id === newEvent.playerId) {
+        let g = p.goals;
+        let a = p.assists;
+        let y = p.yellowCards;
+        let r = p.redCards;
+        let f = p.fouls;
+        let s = p.saves;
 
-          if (newEvent.type === 'GOAL' || newEvent.type === 'PENALTY_GOAL') g += 1;
-          if (newEvent.type === 'ASSIST') a += 1;
-          if (newEvent.type === 'YELLOW_CARD') y += 1;
-          if (newEvent.type === 'RED_CARD' || newEvent.type === 'SECOND_YELLOW_RED') r += 1;
-          if (newEvent.type === 'FOUL') f += 1;
-          if (newEvent.type === 'SAVE') s += 1;
+        if (newEvent.type === 'GOAL' || newEvent.type === 'PENALTY_GOAL') g += 1;
+        if (newEvent.type === 'ASSIST') a += 1;
+        if (newEvent.type === 'YELLOW_CARD') y += 1;
+        if (newEvent.type === 'RED_CARD' || newEvent.type === 'SECOND_YELLOW_RED') r += 1;
+        if (newEvent.type === 'FOUL') f += 1;
+        if (newEvent.type === 'SAVE') s += 1;
 
-          return { ...p, goals: g, assists: a, yellowCards: y, redCards: r, fouls: f, saves: s };
-        }
+        return { ...p, goals: g, assists: a, yellowCards: y, redCards: r, fouls: f, saves: s };
+      }
 
-        if (newEvent.assistPlayerId && p.id === newEvent.assistPlayerId) {
-          return { ...p, assists: p.assists + 1 };
-        }
+      if (newEvent.assistPlayerId && p.id === newEvent.assistPlayerId) {
+        return { ...p, assists: p.assists + 1 };
+      }
 
-        return p;
-      })
-    );
+      return p;
+    });
+
+    setMatches(updatedMatches);
+    setPlayers(updatedPlayers);
+    triggerGlobalSync({ matches: updatedMatches, players: updatedPlayers });
   };
 
   // 🗑️ Delete Event & Automatic Score Rollback (Score & Player Rollback)
@@ -233,59 +270,59 @@ export const App: React.FC = () => {
     if (!targetMatch || !targetEvent) return;
 
     // 1. Rollback Match Score and remove event
-    setMatches(prevMatches =>
-      prevMatches.map(m => {
-        if (m.id === matchId) {
-          let rolledHomeScore = m.homeScore;
-          let rolledAwayScore = m.awayScore;
+    const updatedMatches = matches.map(m => {
+      if (m.id === matchId) {
+        let rolledHomeScore = m.homeScore;
+        let rolledAwayScore = m.awayScore;
 
-          if (targetEvent.type === 'GOAL' || targetEvent.type === 'PENALTY_GOAL') {
-            if (targetEvent.teamId === m.homeTeamId) rolledHomeScore = Math.max(0, rolledHomeScore - 1);
-            else if (targetEvent.teamId === m.awayTeamId) rolledAwayScore = Math.max(0, rolledAwayScore - 1);
-          } else if (targetEvent.type === 'OWN_GOAL') {
-            if (targetEvent.teamId === m.homeTeamId) rolledAwayScore = Math.max(0, rolledAwayScore - 1);
-            else if (targetEvent.teamId === m.awayTeamId) rolledHomeScore = Math.max(0, rolledHomeScore - 1);
-          }
-
-          return {
-            ...m,
-            homeScore: rolledHomeScore,
-            awayScore: rolledAwayScore,
-            events: m.events.filter(e => e.id !== eventId)
-          };
+        if (targetEvent.type === 'GOAL' || targetEvent.type === 'PENALTY_GOAL') {
+          if (targetEvent.teamId === m.homeTeamId) rolledHomeScore = Math.max(0, rolledHomeScore - 1);
+          else if (targetEvent.teamId === m.awayTeamId) rolledAwayScore = Math.max(0, rolledAwayScore - 1);
+        } else if (targetEvent.type === 'OWN_GOAL') {
+          if (targetEvent.teamId === m.homeTeamId) rolledAwayScore = Math.max(0, rolledAwayScore - 1);
+          else if (targetEvent.teamId === m.awayTeamId) rolledHomeScore = Math.max(0, rolledHomeScore - 1);
         }
-        return m;
-      })
-    );
+
+        return {
+          ...m,
+          homeScore: rolledHomeScore,
+          awayScore: rolledAwayScore,
+          events: m.events.filter(e => e.id !== eventId)
+        };
+      }
+      return m;
+    });
 
     // 2. Rollback Player stats (Goals, Assists, Cards, Fouls, Saves)
-    setPlayers(prevPlayers =>
-      prevPlayers.map(p => {
-        if (p.id === targetEvent.playerId) {
-          let g = p.goals;
-          let a = p.assists;
-          let y = p.yellowCards;
-          let r = p.redCards;
-          let f = p.fouls;
-          let s = p.saves;
+    const updatedPlayers = players.map(p => {
+      if (p.id === targetEvent.playerId) {
+        let g = p.goals;
+        let a = p.assists;
+        let y = p.yellowCards;
+        let r = p.redCards;
+        let f = p.fouls;
+        let s = p.saves;
 
-          if (targetEvent.type === 'GOAL' || targetEvent.type === 'PENALTY_GOAL') g = Math.max(0, g - 1);
-          if (targetEvent.type === 'ASSIST') a = Math.max(0, a - 1);
-          if (targetEvent.type === 'YELLOW_CARD') y = Math.max(0, y - 1);
-          if (targetEvent.type === 'RED_CARD' || targetEvent.type === 'SECOND_YELLOW_RED') r = Math.max(0, r - 1);
-          if (targetEvent.type === 'FOUL') f = Math.max(0, f - 1);
-          if (targetEvent.type === 'SAVE') s = Math.max(0, s - 1);
+        if (targetEvent.type === 'GOAL' || targetEvent.type === 'PENALTY_GOAL') g = Math.max(0, g - 1);
+        if (targetEvent.type === 'ASSIST') a = Math.max(0, a - 1);
+        if (targetEvent.type === 'YELLOW_CARD') y = Math.max(0, y - 1);
+        if (targetEvent.type === 'RED_CARD' || targetEvent.type === 'SECOND_YELLOW_RED') r = Math.max(0, r - 1);
+        if (targetEvent.type === 'FOUL') f = Math.max(0, f - 1);
+        if (targetEvent.type === 'SAVE') s = Math.max(0, s - 1);
 
-          return { ...p, goals: g, assists: a, yellowCards: y, redCards: r, fouls: f, saves: s };
-        }
+        return { ...p, goals: g, assists: a, yellowCards: y, redCards: r, fouls: f, saves: s };
+      }
 
-        if (targetEvent.assistPlayerId && p.id === targetEvent.assistPlayerId) {
-          return { ...p, assists: Math.max(0, p.assists - 1) };
-        }
+      if (targetEvent.assistPlayerId && p.id === targetEvent.assistPlayerId) {
+        return { ...p, assists: Math.max(0, p.assists - 1) };
+      }
 
-        return p;
-      })
-    );
+      return p;
+    });
+
+    setMatches(updatedMatches);
+    setPlayers(updatedPlayers);
+    triggerGlobalSync({ matches: updatedMatches, players: updatedPlayers });
   };
 
   // Match Status & Clock updater
@@ -295,69 +332,122 @@ export const App: React.FC = () => {
     minute: number, 
     isClockRunning: boolean
   ) => {
-    setMatches(prevMatches =>
-      prevMatches.map(m => {
-        if (m.id === matchId) {
-          return { ...m, status, currentMinute: minute, isClockRunning };
-        }
-        return m;
-      })
-    );
+    const updatedMatches = matches.map(m => {
+      if (m.id === matchId) {
+        return { ...m, status, currentMinute: minute, isClockRunning };
+      }
+      return m;
+    });
+    setMatches(updatedMatches);
+    triggerGlobalSync({ matches: updatedMatches });
   };
 
   // Match Story updater
   const handleUpdateMatchStory = (matchId: string, story: string) => {
-    setMatches(prevMatches =>
-      prevMatches.map(m => m.id === matchId ? { ...m, matchStoryNotes: story } : m)
-    );
+    const updatedMatches = matches.map(m => m.id === matchId ? { ...m, matchStoryNotes: story } : m);
+    setMatches(updatedMatches);
+    triggerGlobalSync({ matches: updatedMatches });
   };
 
   // Reset Match Score
   const handleResetMatchScore = (matchId: string) => {
-    setMatches(prevMatches =>
-      prevMatches.map(m => m.id === matchId ? { ...m, homeScore: 0, awayScore: 0, events: [] } : m)
-    );
+    const updatedMatches = matches.map(m => m.id === matchId ? { ...m, homeScore: 0, awayScore: 0, events: [] } : m);
+    const updatedPlayers = recalculatePlayerStatsFromMatches(players, updatedMatches);
+    setMatches(updatedMatches);
+    setPlayers(updatedPlayers);
+    triggerGlobalSync({ matches: updatedMatches, players: updatedPlayers });
   };
 
   // ✏️ Edit Match Details
   const handleEditMatch = (updatedMatch: Match) => {
-    setMatches(prev => prev.map(m => m.id === updatedMatch.id ? updatedMatch : m));
+    const updatedMatches = matches.map(m => m.id === updatedMatch.id ? updatedMatch : m);
+    const updatedPlayers = recalculatePlayerStatsFromMatches(players, updatedMatches);
+    setMatches(updatedMatches);
+    setPlayers(updatedPlayers);
+    triggerGlobalSync({ matches: updatedMatches, players: updatedPlayers });
   };
 
   // 🗑️ Delete Match
   const handleDeleteMatch = (matchId: string) => {
-    setMatches(prev => prev.filter(m => m.id !== matchId));
+    const updatedMatches = matches.filter(m => m.id !== matchId);
+    const updatedPlayers = recalculatePlayerStatsFromMatches(players, updatedMatches);
+    setMatches(updatedMatches);
+    setPlayers(updatedPlayers);
+    triggerGlobalSync({ matches: updatedMatches, players: updatedPlayers });
   };
 
-  // Team & Player CRUD
+  // Team & Player Cascading CRUD
   const handleSaveTeam = (teamToSave: Team) => {
-    setTeams(prev => {
-      const exists = prev.some(t => t.id === teamToSave.id);
-      return exists ? prev.map(t => t.id === teamToSave.id ? teamToSave : t) : [...prev, teamToSave];
-    });
+    const exists = teams.some(t => t.id === teamToSave.id);
+    const updatedTeams = exists
+      ? teams.map(t => (t.id === teamToSave.id ? teamToSave : t))
+      : [...teams, teamToSave];
+    
+    setTeams(updatedTeams);
+    triggerGlobalSync({ teams: updatedTeams });
   };
 
   const handleDeleteTeam = (teamId: string) => {
-    setTeams(prev => prev.filter(t => t.id !== teamId));
-    setPlayers(prev => prev.filter(p => p.teamId !== teamId));
-    setMatches(prev => prev.filter(m => m.homeTeamId !== teamId && m.awayTeamId !== teamId));
+    const updatedTeams = teams.filter(t => t.id !== teamId);
+    const updatedPlayers = players.filter(p => p.teamId !== teamId);
+    const updatedMatches = matches.filter(m => m.homeTeamId !== teamId && m.awayTeamId !== teamId);
+    
+    setTeams(updatedTeams);
+    setPlayers(updatedPlayers);
+    setMatches(updatedMatches);
+    triggerGlobalSync({ teams: updatedTeams, players: updatedPlayers, matches: updatedMatches });
   };
 
   const handleSavePlayer = (playerToSave: Player) => {
-    setPlayers(prev => {
-      const exists = prev.some(p => p.id === playerToSave.id);
-      return exists ? prev.map(p => p.id === playerToSave.id ? playerToSave : p) : [...prev, playerToSave];
+    // Cascades name, team and role changes to all match events and POTM awards
+    const { updatedPlayers, updatedMatches } = cascadePlayerUpdate(playerToSave, players, matches);
+    
+    // Also re-verify if this player is captain/icon in their team
+    const updatedTeams = teams.map(t => {
+      if (t.id === playerToSave.teamId) {
+        return {
+          ...t,
+          captainPlayerId: playerToSave.isCaptain ? playerToSave.id : (t.captainPlayerId === playerToSave.id ? undefined : t.captainPlayerId),
+          iconPlayerId: playerToSave.isIconPlayer ? playerToSave.id : (t.iconPlayerId === playerToSave.id ? undefined : t.iconPlayerId)
+        };
+      }
+      return t;
     });
+
+    setPlayers(updatedPlayers);
+    setMatches(updatedMatches);
+    setTeams(updatedTeams);
+    triggerGlobalSync({ players: updatedPlayers, matches: updatedMatches, teams: updatedTeams });
   };
 
   const handleDeletePlayer = (playerId: string) => {
-    setPlayers(prev => prev.filter(p => p.id !== playerId));
+    const updatedPlayers = players.filter(p => p.id !== playerId);
+    const updatedTeams = teams.map(t => ({
+      ...t,
+      captainPlayerId: t.captainPlayerId === playerId ? undefined : t.captainPlayerId,
+      iconPlayerId: t.iconPlayerId === playerId ? undefined : t.iconPlayerId
+    }));
+    
+    // Remove player from match events and POTM
+    const updatedMatches = matches.map(m => ({
+      ...m,
+      potmPlayerId: m.potmPlayerId === playerId ? undefined : m.potmPlayerId,
+      potmPlayerName: m.potmPlayerId === playerId ? undefined : m.potmPlayerName,
+      events: m.events.filter(e => e.playerId !== playerId && e.assistPlayerId !== playerId)
+    }));
+
+    setPlayers(updatedPlayers);
+    setTeams(updatedTeams);
+    setMatches(updatedMatches);
+    triggerGlobalSync({ players: updatedPlayers, teams: updatedTeams, matches: updatedMatches });
   };
 
   // Create match
   const handleCreateMatch = (newMatch: Match) => {
-    setMatches(prev => [newMatch, ...prev]);
+    const updatedMatches = [newMatch, ...matches];
+    setMatches(updatedMatches);
     setSelectedMatchId(newMatch.id);
+    triggerGlobalSync({ matches: updatedMatches });
   };
 
   const handleCreateMatchFromData = (data: {
@@ -386,8 +476,20 @@ export const App: React.FC = () => {
       matchStoryNotes: '',
       events: []
     };
-    setMatches(prev => [newMatch, ...prev]);
+    const updatedMatches = [newMatch, ...matches];
+    setMatches(updatedMatches);
     setSelectedMatchId(newMatch.id);
+    triggerGlobalSync({ matches: updatedMatches });
+  };
+
+  const handleUpdateTournamentInfo = (newInfo: TournamentInfo) => {
+    setTournamentInfo(newInfo);
+    triggerGlobalSync({ tournamentInfo: newInfo });
+  };
+
+  const handleUpdateAdminPin = (newPin: string) => {
+    setAdminPin(newPin);
+    triggerGlobalSync({ adminPin: newPin });
   };
 
   // Reset / Clear All Data to Clean Slate
@@ -399,6 +501,7 @@ export const App: React.FC = () => {
     localStorage.removeItem('gp_teams');
     localStorage.removeItem('gp_players');
     localStorage.removeItem('gp_matches');
+    triggerGlobalSync({ teams: [], players: [], matches: [] });
   };
 
   // Load Demo Data for testing
@@ -407,6 +510,7 @@ export const App: React.FC = () => {
     setPlayers(DEMO_PLAYERS);
     setMatches(DEMO_MATCHES);
     setSelectedMatchId(DEMO_MATCHES[0].id);
+    triggerGlobalSync({ teams: DEMO_TEAMS, players: DEMO_PLAYERS, matches: DEMO_MATCHES });
   };
 
   const liveMatchesCount = matches.filter(
@@ -429,6 +533,7 @@ export const App: React.FC = () => {
         }}
         onOpenInstallModal={() => setShowInstallModal(true)}
         liveMatchCount={liveMatchesCount}
+        lastSyncTime={lastSyncTime}
       />
 
       {/* Main Content Area */}
@@ -481,7 +586,7 @@ export const App: React.FC = () => {
         {activeTab === 'INFO' && (
           <TournamentInfoView
             info={tournamentInfo}
-            onUpdateInfo={setTournamentInfo}
+            onUpdateInfo={handleUpdateTournamentInfo}
             isAdmin={isAdmin}
           />
         )}
@@ -490,7 +595,7 @@ export const App: React.FC = () => {
           <AdminHubView
             isAdmin={isAdmin}
             adminPin={adminPin}
-            onUpdatePin={setAdminPin}
+            onUpdatePin={handleUpdateAdminPin}
             onToggleAdmin={() => {
               if (isAdmin) {
                 setIsAdmin(false);
@@ -530,6 +635,25 @@ export const App: React.FC = () => {
         isOpen={showInstallModal}
         onClose={() => setShowInstallModal(false)}
       />
+
+      {/* Floating Bottom Quick Install Banner for Mobile */}
+      <div className="fixed bottom-3 left-3 right-3 sm:hidden z-30 flex items-center justify-between p-3 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-emerald-500/40 shadow-2xl">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">
+            ⚽
+          </div>
+          <div>
+            <p className="text-xs font-black text-white">NPL অ্যাপ যোগ করুন</p>
+            <p className="text-[10px] text-slate-400">হোমস্ক্রিন থেকে দ্রুত অ্যাক্সেস</p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowInstallModal(true)}
+          className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+        >
+          ইনস্টল করুন 📲
+        </button>
+      </div>
     </div>
   );
 };
