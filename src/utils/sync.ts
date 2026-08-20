@@ -52,7 +52,7 @@ async function pushStateToServer(payload: Omit<SyncPayload, 'senderId' | 'timest
 
     if (response.ok) {
       const data = await response.json();
-      if (data.version) {
+      if (typeof data.version === 'number') {
         currentGlobalVersion = data.version;
       }
     }
@@ -92,7 +92,7 @@ export function broadcastStateChange(payload: Omit<SyncPayload, 'senderId' | 'ti
     );
   } catch {}
 
-  // 3. Central Server Push: Queue and flush to `/api/sync` so all public viewers on ANY mobile/PC get the update immediately
+  // 3. Central Server Push: Immediately queue and push to `/api/sync`
   pendingSyncPayload = { ...pendingSyncPayload, ...payload };
   if (syncTimeout) clearTimeout(syncTimeout);
   
@@ -101,24 +101,26 @@ export function broadcastStateChange(payload: Omit<SyncPayload, 'senderId' | 'ti
       pushStateToServer(pendingSyncPayload as any);
       pendingSyncPayload = null;
     }
-  }, 100);
+  }, 40);
 }
 
 /**
  * Fetches the latest global state from the server on startup or reconnection
  */
-export async function fetchInitialServerState(): Promise<Partial<SyncPayload> | null> {
+export async function fetchInitialServerState(): Promise<SyncPayload | null> {
   try {
-    const res = await fetch('/api/state');
+    const res = await fetch(`/api/state?_t=${Date.now()}`, {
+      headers: { 'Cache-Control': 'no-cache' }
+    });
     if (!res.ok) return null;
     const data = await res.json();
-    if (data && data.version) {
+    if (data && typeof data.version === 'number') {
       currentGlobalVersion = data.version;
       return {
         type: 'SYNC_ALL',
-        teams: data.teams && data.teams.length > 0 ? data.teams : undefined,
-        players: data.players && data.players.length > 0 ? data.players : undefined,
-        matches: data.matches && data.matches.length > 0 ? data.matches : undefined,
+        teams: Array.isArray(data.teams) ? data.teams : undefined,
+        players: Array.isArray(data.players) ? data.players : undefined,
+        matches: Array.isArray(data.matches) ? data.matches : undefined,
         tournamentInfo: data.tournamentInfo || undefined,
         adminPin: data.adminPin || undefined,
         version: data.version,
@@ -154,19 +156,18 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
             const data = JSON.parse(event.data);
             if (data.senderId === TAB_SESSION_ID) return; // ignore our own broadcast
             
-            if (data.version && data.version <= currentGlobalVersion && data.senderId !== 'initial_sync') {
-              return;
-            }
-
-            if (data.version) {
+            if (typeof data.version === 'number') {
+              if (data.version <= currentGlobalVersion && data.senderId !== 'initial_sync') {
+                return;
+              }
               currentGlobalVersion = data.version;
             }
 
             onSyncReceived({
               type: 'SYNC_ALL',
-              teams: data.teams,
-              players: data.players,
-              matches: data.matches,
+              teams: Array.isArray(data.teams) ? data.teams : undefined,
+              players: Array.isArray(data.players) ? data.players : undefined,
+              matches: Array.isArray(data.matches) ? data.matches : undefined,
               tournamentInfo: data.tournamentInfo,
               adminPin: data.adminPin,
               senderId: data.senderId || 'sse-server',
@@ -179,7 +180,7 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
         };
 
         eventSource.onerror = () => {
-          // If SSE encounters temporary issue, it automatically tries to reconnect.
+          // SSE will reconnect automatically
         };
       }
     } catch (e) {
@@ -189,20 +190,22 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
 
   setupSSE();
 
-  // 🔄 2. Fast Polling Fallback (every 2.5 seconds) to ensure 100% reliability across all network conditions
-  pollInterval = setInterval(async () => {
+  // Helper to check and pull fresh state from server
+  const syncFromServer = async () => {
     if (!isSubscribed) return;
     try {
-      const res = await fetch(`/api/state?v=${currentGlobalVersion}`);
+      const res = await fetch(`/api/state?v=${currentGlobalVersion}&_t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
-        if (data.changed && data.version > currentGlobalVersion) {
+        if (data.changed && typeof data.version === 'number' && data.version > currentGlobalVersion) {
           currentGlobalVersion = data.version;
           onSyncReceived({
             type: 'SYNC_ALL',
-            teams: data.teams,
-            players: data.players,
-            matches: data.matches,
+            teams: Array.isArray(data.teams) ? data.teams : undefined,
+            players: Array.isArray(data.players) ? data.players : undefined,
+            matches: Array.isArray(data.matches) ? data.matches : undefined,
             tournamentInfo: data.tournamentInfo,
             adminPin: data.adminPin,
             senderId: 'poll-server',
@@ -212,9 +215,21 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
         }
       }
     } catch {}
-  }, 2500);
+  };
 
-  // ⚡ 3. Cross-Tab Broadcast Channel (Zero Latency on same device)
+  // 🔄 2. Fast Polling Fallback (every 1.5 seconds) to ensure 100% real-time accuracy across mobile networks
+  pollInterval = setInterval(syncFromServer, 1500);
+
+  // 📱 3. Auto-sync on Window Focus / Mobile Tab Visibility Change
+  const handleVisibilityOrFocus = () => {
+    if (document.visibilityState === 'visible') {
+      syncFromServer();
+    }
+  };
+  window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+  window.addEventListener('focus', handleVisibilityOrFocus);
+
+  // ⚡ 4. Cross-Tab Broadcast Channel (Zero Latency on same device)
   const handleBroadcastMessage = (event: MessageEvent<SyncPayload>) => {
     if (!event.data || event.data.senderId === TAB_SESSION_ID) return;
     onSyncReceived(event.data);
@@ -269,6 +284,8 @@ export function subscribeToStateSync(onSyncReceived: (payload: SyncPayload) => v
       clearInterval(pollInterval);
       pollInterval = null;
     }
+    window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.removeEventListener('focus', handleVisibilityOrFocus);
     if (broadcastChannel) {
       broadcastChannel.removeEventListener('message', handleBroadcastMessage);
     }

@@ -78,32 +78,22 @@ export const App: React.FC = () => {
     // Initial fetch from central server
     fetchInitialServerState().then((serverData) => {
       if (serverData) {
-        if (serverData.teams && serverData.teams.length > 0) setTeams(serverData.teams);
-        if (serverData.players && serverData.players.length > 0) setPlayers(serverData.players);
-        if (serverData.matches && serverData.matches.length > 0) setMatches(serverData.matches);
+        if (Array.isArray(serverData.teams) && serverData.teams.length > 0) setTeams(serverData.teams);
+        if (Array.isArray(serverData.players) && serverData.players.length > 0) setPlayers(serverData.players);
+        if (Array.isArray(serverData.matches) && serverData.matches.length > 0) setMatches(serverData.matches);
         if (serverData.tournamentInfo) setTournamentInfo(serverData.tournamentInfo);
         if (serverData.adminPin) setAdminPin(serverData.adminPin);
-        setLastSyncTime(Date.now());
-      } else {
-        // If server has no state yet, initialize it with current state
-        broadcastStateChange({
-          type: 'SYNC_ALL',
-          teams,
-          players,
-          matches,
-          tournamentInfo,
-          adminPin,
-        });
+        setLastSyncTime(serverData.timestamp || Date.now());
       }
     });
 
     const unsubscribe = subscribeToStateSync((payload: SyncPayload) => {
-      if (payload.teams) setTeams(payload.teams);
-      if (payload.players) setPlayers(payload.players);
-      if (payload.matches) setMatches(payload.matches);
+      if (Array.isArray(payload.teams) && payload.teams.length > 0) setTeams(payload.teams);
+      if (Array.isArray(payload.players) && payload.players.length > 0) setPlayers(payload.players);
+      if (Array.isArray(payload.matches) && payload.matches.length > 0) setMatches(payload.matches);
       if (payload.tournamentInfo) setTournamentInfo(payload.tournamentInfo);
       if (payload.adminPin) setAdminPin(payload.adminPin);
-      setLastSyncTime(Date.now());
+      setLastSyncTime(payload.timestamp || Date.now());
     });
 
     return () => unsubscribe();
@@ -137,7 +127,7 @@ export const App: React.FC = () => {
     }
   }, [matches, selectedMatchId]);
 
-  // Broadcast Helper to notify all other tabs & components
+  // Broadcast Helper to notify all other devices, tabs & components
   const triggerGlobalSync = useCallback((updates: {
     teams?: Team[];
     players?: Player[];
@@ -145,12 +135,17 @@ export const App: React.FC = () => {
     tournamentInfo?: TournamentInfo;
     adminPin?: string;
   }) => {
-    broadcastStateChange({
-      type: 'SYNC_ALL',
-      ...updates
-    });
+    const fullPayload = {
+      type: 'SYNC_ALL' as const,
+      teams: updates.teams || teams,
+      players: updates.players || players,
+      matches: updates.matches || matches,
+      tournamentInfo: updates.tournamentInfo || tournamentInfo,
+      adminPin: updates.adminPin || adminPin,
+    };
+    broadcastStateChange(fullPayload);
     setLastSyncTime(Date.now());
-  }, []);
+  }, [teams, players, matches, tournamentInfo, adminPin]);
 
   // Calculate Standings Table Dynamically with 100% precision
   const standings = useMemo<StandingRow[]>(() => {

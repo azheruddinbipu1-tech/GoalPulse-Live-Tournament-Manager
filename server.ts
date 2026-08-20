@@ -2,6 +2,12 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import {
+  INITIAL_TEAMS,
+  INITIAL_PLAYERS,
+  INITIAL_MATCHES,
+  INITIAL_TOURNAMENT_INFO,
+} from "./src/sampleData";
 
 interface ServerState {
   version: number;
@@ -25,14 +31,14 @@ if (!fs.existsSync(DATA_DIR)) {
   }
 }
 
-// In-Memory Global State
+// In-Memory Global State initialized with tournament seed
 let globalState: ServerState = {
   version: 1,
   lastUpdated: Date.now(),
-  teams: [],
-  players: [],
-  matches: [],
-  tournamentInfo: null,
+  teams: INITIAL_TEAMS,
+  players: INITIAL_PLAYERS,
+  matches: INITIAL_MATCHES,
+  tournamentInfo: INITIAL_TOURNAMENT_INFO,
   adminPin: "1234",
 };
 
@@ -45,14 +51,16 @@ try {
       globalState = {
         version: parsed.version || 1,
         lastUpdated: parsed.lastUpdated || Date.now(),
-        teams: parsed.teams || [],
-        players: parsed.players || [],
-        matches: parsed.matches || [],
-        tournamentInfo: parsed.tournamentInfo || null,
+        teams: Array.isArray(parsed.teams) && parsed.teams.length > 0 ? parsed.teams : INITIAL_TEAMS,
+        players: Array.isArray(parsed.players) && parsed.players.length > 0 ? parsed.players : INITIAL_PLAYERS,
+        matches: Array.isArray(parsed.matches) && parsed.matches.length > 0 ? parsed.matches : INITIAL_MATCHES,
+        tournamentInfo: parsed.tournamentInfo || INITIAL_TOURNAMENT_INFO,
         adminPin: parsed.adminPin || "1234",
       };
       console.log(`[STATE] Loaded state from disk with version ${globalState.version}`);
     }
+  } else {
+    saveStateToDisk();
   }
 } catch (err) {
   console.error("Error reading saved tournament_state.json:", err);
@@ -89,6 +97,17 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+  // CORS middleware for all API routes
+  app.use("/api", (req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    if (req.method === "OPTIONS") {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Health check endpoint
   app.get("/api/health", (_req, res) => {
     res.json({
@@ -104,6 +123,7 @@ async function startServer() {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("X-Accel-Buffering", "no"); // Disable proxy buffering
 
     // Send initial snapshot immediately
@@ -130,6 +150,7 @@ async function startServer() {
 
   // 📥 Get Current Global State
   app.get("/api/state", (req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     const clientVersion = Number(req.query.v);
     if (!isNaN(clientVersion) && clientVersion === globalState.version) {
       return res.json({ changed: false, version: globalState.version });
@@ -142,23 +163,23 @@ async function startServer() {
     const { teams, players, matches, tournamentInfo, adminPin, senderId } = req.body;
 
     let hasChanges = false;
-    if (teams !== undefined) {
+    if (Array.isArray(teams)) {
       globalState.teams = teams;
       hasChanges = true;
     }
-    if (players !== undefined) {
+    if (Array.isArray(players)) {
       globalState.players = players;
       hasChanges = true;
     }
-    if (matches !== undefined) {
+    if (Array.isArray(matches)) {
       globalState.matches = matches;
       hasChanges = true;
     }
-    if (tournamentInfo !== undefined) {
+    if (tournamentInfo !== undefined && tournamentInfo !== null) {
       globalState.tournamentInfo = tournamentInfo;
       hasChanges = true;
     }
-    if (adminPin !== undefined) {
+    if (typeof adminPin === "string" && adminPin.trim() !== "") {
       globalState.adminPin = adminPin;
       hasChanges = true;
     }

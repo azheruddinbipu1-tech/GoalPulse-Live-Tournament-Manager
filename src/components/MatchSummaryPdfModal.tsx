@@ -79,16 +79,60 @@ export const MatchSummaryPdfModal: React.FC<MatchSummaryPdfModalProps> = ({
     saves: 4
   };
 
+  // Helper to convert modern CSS colors (oklch, color-mix, lab) to standard rgb/hex format
+  const sanitizeCssForCanvas = (cssText: string): string => {
+    return cssText
+      .replace(/oklch\([^)]+\)/gi, (match) => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#0f172a';
+            ctx.fillStyle = match;
+            return ctx.fillStyle || '#0f172a';
+          }
+        } catch {}
+        return '#10b981';
+      })
+      .replace(/color-mix\([^)]+\)/gi, '#10b981')
+      .replace(/color\([^)]+\)/gi, '#10b981');
+  };
+
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
     try {
       setIsGenerating(true);
       const element = printRef.current;
+      
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#0f172a'
+        backgroundColor: '#0f172a',
+        onclone: (clonedDoc) => {
+          try {
+            // 1. Sanitize all <style> elements in cloned iframe document
+            const styles = clonedDoc.querySelectorAll('style');
+            styles.forEach((style) => {
+              if (style.textContent && (style.textContent.includes('oklch') || style.textContent.includes('color-mix') || style.textContent.includes('color('))) {
+                style.textContent = sanitizeCssForCanvas(style.textContent);
+              }
+            });
+
+            // 2. Sanitize all inline styles in the cloned document
+            const allElements = clonedDoc.querySelectorAll('*');
+            allElements.forEach((el) => {
+              if (el instanceof HTMLElement) {
+                const styleAttr = el.getAttribute('style');
+                if (styleAttr && (styleAttr.includes('oklch') || styleAttr.includes('color-mix') || styleAttr.includes('color('))) {
+                  el.setAttribute('style', sanitizeCssForCanvas(styleAttr));
+                }
+              }
+            });
+          } catch (e) {
+            console.warn('[PDF] Style sanitization warning:', e);
+          }
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');
